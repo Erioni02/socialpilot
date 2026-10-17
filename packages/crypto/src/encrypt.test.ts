@@ -35,3 +35,12 @@ describe("loadKey", () => {
     expect(() => loadKey({})).toThrow(/ENCRYPTION_KEY/);
   });
 });
+
+describe("sealJson/openJson", () => {
+  it("round-trips JSON as DB-ready bytes", async () => {
+    const { sealJson, openJson } = await import("./encrypt");
+    const sealed = sealJson(["k1", "k2"], key);
+    expect(sealed).toBeInstanceOf(Uint8Array);
+    expect(openJson<string[]>(sealed, key)).toEqual(["k1", "k2"]);
+  });
+});

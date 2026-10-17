@@ -37,6 +37,13 @@ describe("extractPage", () => {
     expect(extractPage("https://x.com/", fixture("spa.html"), 200).wordCount).toBe(0);
   });
 
+  it("keeps a capped sample of visible body text", () => {
+    expect(good.textSample).toMatch(/^Home Pricing Twitter Get your vibe judged/);
+    expect(good.textSample).not.toContain("<");
+    const long = extractPage("https://x.com/", `<body><p>${"word ".repeat(2000)}</p></body>`, 200);
+    expect(long.textSample.length).toBeLessThanOrEqual(2000);
+  });
+
   it("handles an empty body", () => {
     const empty = extractPage("https://x.com/", "", 403);
     expect(empty.httpStatus).toBe(403);

@@ -17,6 +17,8 @@ export const PageInfoSchema = z.object({
   imagesMissingAlt: z.number(),
   ogTags: z.record(z.string()),
   wordCount: z.number(),
+  /** First 2000 characters of visible body text (for AI drafting). */
+  textSample: z.string(),
   httpStatus: z.number()
 });
 export type PageInfo = z.infer<typeof PageInfoSchema>;

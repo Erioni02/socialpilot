@@ -2,6 +2,7 @@ import type { PageInfo } from "@sp/shared";
 import { load } from "cheerio";
 
 const CTA_TEXT = /get started|sign ?up|try|start|buy|subscribe|book|contact|download|join/i;
+export const TEXT_SAMPLE_CHARS = 2000;
 const CTA_CLASS = /btn|button|cta/i;
 
 const clean = (text: string) => text.replace(/\s+/g, " ").trim();
@@ -56,7 +57,10 @@ export function extractPage(url: string, html: string, status: number): PageInfo
   const lang = $("html").attr("lang")?.trim() || null;
 
   $("script, style, noscript, template, svg").remove();
-  const wordCount = clean($("body").text()).split(" ").filter(Boolean).length;
+  // Separate adjacent elements ("<a>Home</a><a>Pricing</a>") so words don't run together.
+  $("body *").each((_, el) => void $(el).append(" "));
+  const bodyText = clean($("body").text());
+  const wordCount = bodyText.split(" ").filter(Boolean).length;
 
   return {
     url,
@@ -75,6 +79,7 @@ export function extractPage(url: string, html: string, status: number): PageInfo
     imagesMissingAlt,
     ogTags,
     wordCount,
+    textSample: bodyText.slice(0, TEXT_SAMPLE_CHARS),
     httpStatus: status
   };
 }

@@ -28,3 +28,12 @@ export function decrypt(blob: Buffer, key: Buffer = loadKey()): string {
   decipher.setAuthTag(tag);
   return Buffer.concat([decipher.update(blob.subarray(1 + IV_BYTES + TAG_BYTES)), decipher.final()]).toString("utf8");
 }
+
+/** Encrypts a JSON value into bytes ready for a Prisma `Bytes` column. */
+export function sealJson(value: unknown, key: Buffer = loadKey()): Uint8Array<ArrayBuffer> {
+  return new Uint8Array(encrypt(JSON.stringify(value), key));
+}
+
+export function openJson<T>(bytes: Uint8Array, key: Buffer = loadKey()): T {
+  return JSON.parse(decrypt(Buffer.from(bytes), key)) as T;
+}

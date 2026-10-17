@@ -1,4 +1,4 @@
-import type { ZodType } from "zod";
+import type { ZodType, ZodTypeDef } from "zod";
 import { defaultFailover, StopFailover, type Failover } from "./failover";
 import { estimateCostUsd } from "./pricing";
 import type { ChatMessage, ProviderSpec, Usage } from "./providers";
@@ -11,7 +11,7 @@ export type ChatOptions<T> = {
   providers: ProviderSpec[];
   messages: ChatMessage[];
   json?: boolean;
-  schema?: ZodType<T>;
+  schema?: ZodType<T, ZodTypeDef, unknown>;
   signal?: AbortSignal;
   label?: string;
   client?: Failover;
