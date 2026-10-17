@@ -1,0 +1,17 @@
+{
+  "name": "@sp/worker",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch --clear-screen=false src/index.ts",
+    "start": "tsx src/index.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@sp/db": "*",
+    "@sp/tools": "*",
+    "dotenv": "^16.4.7",
+    "tsx": "^4.19.2"
+  }
+}
