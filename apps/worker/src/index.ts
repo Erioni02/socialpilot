@@ -1,6 +1,7 @@
 import "./env";
 import { prisma } from "@sp/db";
-import { closeEvents, getBoss, registerCycle1Tools, runTask, stopBoss, TOOLS_QUEUE } from "@sp/tools";
+import { closeEvents, getBoss, registerCycle1Tools, stopBoss, TOOLS_QUEUE } from "@sp/tools";
+import { handleToolJob } from "./processor";
 import { reconcile } from "./reconcile";
 
 const CONCURRENCY = Number(process.env.WORKER_CONCURRENCY ?? 4);
@@ -18,8 +19,7 @@ async function main() {
 
   for (let i = 0; i < CONCURRENCY; i++) {
     await boss.work<{ taskId: string }>(TOOLS_QUEUE, { batchSize: 1, includeMetadata: true, pollingIntervalSeconds: 1 }, async ([job]) => {
-      if (!job) return;
-      await runTask(job.data.taskId, { attempt: job.retryCount + 1 });
+      if (job) await handleToolJob(job);
     });
   }
   console.log(`[worker] ready (queue=${TOOLS_QUEUE}, concurrency=${CONCURRENCY})`);
@@ -37,6 +37,9 @@ async function main() {
   process.on("SIGINT", () => void shutdown("SIGINT"));
   process.on("SIGTERM", () => void shutdown("SIGTERM"));
 }
+
+// Last line of defence: log and keep serving other jobs.
+process.on("unhandledRejection", (reason) => console.error(`[worker] unhandled rejection: ${String((reason as Error)?.message ?? reason).slice(0, 300)}`));
 
 main().catch((error: Error) => {
   console.error(`[worker] failed to start: ${error.message}`);

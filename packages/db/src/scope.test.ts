@@ -28,4 +28,11 @@ describe("project scoping", () => {
   it("builds a where clause that always includes the workspace", () => {
     expect(projectWhere({ workspaceId: "w", projectId: "p" })).toEqual({ id: "p", workspaceId: "w" });
   });
+
+  it("stores non-Latin-1 text (the database must be UTF-8)", async () => {
+    const a = await workspaceWithProject("a");
+    const name = "Résumé → 🚀 简历";
+    const updated = await prisma.project.update({ where: { id: a.project.id }, data: { name } });
+    expect(updated.name).toBe(name);
+  });
 });

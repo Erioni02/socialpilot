@@ -157,14 +157,19 @@ export async function crawlSite(startUrl: string, opts: CrawlOptions = {}): Prom
   }
 
   if (checkLinks) {
-    for (const item of queue.slice(0, maxLinkChecks)) {
-      try {
-        let res = await fetch(item.url, { method: "HEAD" });
-        if (res.status === 405) res = await fetch(item.url);
-        if (res.status >= 400) brokenLinks.push({ url: item.url, from: item.from, status: res.status });
-      } catch {
-        /* unreachable links are not proof of a broken page */
-      }
+    const toCheck = queue.slice(0, maxLinkChecks);
+    for (let i = 0; i < toCheck.length; i += concurrency) {
+      await Promise.all(
+        toCheck.slice(i, i + concurrency).map(async (item) => {
+          try {
+            let res = await fetch(item.url, { method: "HEAD", timeoutMs: 5000 });
+            if (res.status === 405) res = await fetch(item.url, { timeoutMs: 5000 });
+            if (res.status >= 400) brokenLinks.push({ url: item.url, from: item.from, status: res.status });
+          } catch {
+            /* unreachable links are not proof of a broken page */
+          }
+        })
+      );
     }
   }
 

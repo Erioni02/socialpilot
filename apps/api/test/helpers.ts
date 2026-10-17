@@ -1,12 +1,20 @@
 import { prisma, seed } from "@sp/db";
 import { resetDatabase } from "@sp/db/testing";
 import type { FastifyInstance, LightMyRequestResponse } from "fastify";
+import { clearRegistry, registerCycle1Tools, setEnqueuer } from "@sp/tools";
+import { registerApiRoutes } from "../src/routes";
 import { buildServer, type ServerOptions } from "../src/server";
+
+/** Jobs enqueued during a test (the real queue isn't used in API tests). */
+export const enqueued: string[] = [];
+clearRegistry();
+registerCycle1Tools();
+setEnqueuer(async (taskId) => void enqueued.push(taskId));
 
 export const OWNER = { email: "owner@test.dev", password: "correct horse battery staple" };
 
 export async function testServer(opts: ServerOptions = {}): Promise<FastifyInstance> {
-  const app = await buildServer({ logger: false, loginRateLimit: 1000, ...opts });
+  const app = await buildServer({ logger: false, loginRateLimit: 1000, registerRoutes: registerApiRoutes, ...opts });
   await app.ready();
   return app;
 }

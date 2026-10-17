@@ -27,6 +27,16 @@ export async function buildServer(opts: ServerOptions = {}): Promise<FastifyInst
   app.setSerializerCompiler(serializerCompiler);
   app.setErrorHandler(errorHandler);
   app.decorateRequest("auth", null);
+  // Treat an empty JSON body as "no body" (fetch wrappers often send the header on body-less POSTs).
+  app.addContentTypeParser("application/json", { parseAs: "string", bodyLimit: 1024 * 1024 }, (_request, body, done) => {
+    const text = String(body);
+    if (!text.trim()) return done(null, undefined);
+    try {
+      done(null, JSON.parse(text));
+    } catch {
+      done(Object.assign(new Error("Request body is not valid JSON"), { statusCode: 400, code: "invalid_json" }), undefined);
+    }
+  });
 
   await app.register(helmet, { contentSecurityPolicy: false });
   await app.register(cors, { origin: opts.webOrigin ?? process.env.WEB_ORIGIN ?? "http://localhost:5173", credentials: true });
