@@ -7,19 +7,21 @@
   "types": "src/index.ts",
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "generate": "prisma generate",
-    "migrate": "prisma migrate deploy",
-    "migrate:dev": "prisma migrate dev",
-    "seed": "tsx src/seed-cli.ts"
+    "generate": "dotenv -e ../../.env -- prisma generate",
+    "migrate": "dotenv -e ../../.env -- prisma migrate deploy",
+    "migrate:dev": "dotenv -e ../../.env -- prisma migrate dev",
+    "seed": "tsx src/seed-cli.ts",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
     "@prisma/client": "^6.1.0",
-    "@sp/crypto": "workspace:*",
+    "@sp/crypto": "*",
     "argon2": "^0.41.1"
   },
   "devDependencies": {
     "prisma": "^6.1.0",
     "tsx": "^4.19.2",
-    "dotenv": "^16.4.7"
+    "dotenv": "^16.4.7",
+    "dotenv-cli": "^8.0.0"
   }
 }

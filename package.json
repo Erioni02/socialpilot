@@ -2,15 +2,19 @@
   "name": "socialpilot",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@9.15.9",
   "scripts": {
-    "dev": "pnpm --parallel --filter @sp/api --filter @sp/worker --filter @sp/web dev",
-    "build": "pnpm -r --filter ./apps/* build",
-    "typecheck": "pnpm -r typecheck",
+    "dev": "concurrently -k -n api,worker,web -c blue,magenta,green \"npm run dev -w @sp/api\" \"npm run dev -w @sp/worker\" \"npm run dev -w @sp/web\"",
+    "dev:api": "npm run dev -w @sp/api",
+    "dev:worker": "npm run dev -w @sp/worker",
+    "dev:web": "npm run dev -w @sp/web",
+    "db:local": "node scripts/local-db.mjs",
+    "db:migrate": "npm run migrate -w @sp/db",
+    "db:seed": "npm run seed -w @sp/db",
+    "build": "npm run build --workspaces --if-present",
+    "start": "concurrently -k -n api,worker \"npm run start -w @sp/api\" \"npm run start -w @sp/worker\"",
+    "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint .",
     "test": "vitest run",
-    "db:migrate": "pnpm --filter @sp/db migrate",
-    "db:seed": "pnpm --filter @sp/db seed",
     "e2e": "playwright test -c e2e/playwright.config.ts"
   },
   "devDependencies": {
@@ -19,6 +23,24 @@
     "eslint": "^9.17.0",
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.18.0",
-    "vitest": "^2.1.8"
+    "vitest": "^2.1.8",
+    "concurrently": "^9.1.0",
+    "embedded-postgres": "17.9.0-beta.16"
+  },
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20.11"
+  },
+  "allowScripts": {
+    "@embedded-postgres/windows-x64@17.9.0-beta.17": true,
+    "@prisma/client@6.19.3": true,
+    "@prisma/engines@6.19.3": true,
+    "argon2@0.41.1": true,
+    "esbuild@0.21.5": true,
+    "esbuild@0.28.2": true,
+    "prisma@6.19.3": true
   }
 }

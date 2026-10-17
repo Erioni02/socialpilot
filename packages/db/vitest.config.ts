@@ -4,7 +4,7 @@ export const TEST_DATABASE_URL = process.env.TEST_DATABASE_URL ?? "postgresql://
 
 export default defineProject({
   test: {
-    env: { DATABASE_URL: TEST_DATABASE_URL },
+    env: { DATABASE_URL: TEST_DATABASE_URL, DIRECT_URL: TEST_DATABASE_URL },
     globalSetup: ["./test/global-setup.ts"],
     fileParallelism: false
   }
