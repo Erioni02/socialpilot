@@ -1,6 +1,6 @@
 import { prisma } from "@sp/db";
 import { CAPABILITIES, PermissionModeSchema, PolicySchema } from "@sp/shared";
-import { enqueueTask, loadPolicy, publishEvent, toTaskSummary } from "@sp/tools";
+import { enqueueTask, loadPolicy, publishEvent, spendSummary, toTaskSummary } from "@sp/tools";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { authOf } from "../auth/guard";
@@ -44,6 +44,12 @@ export const governanceRoutes: FastifyPluginAsyncZod = async (app) => {
       data: { workspaceId: auth.workspaceId, projectId: project.id, actorType: "user", actorId: auth.userId, action: "policy.update", argsRedacted: changes, outcome: "succeeded" }
     });
     return next;
+  });
+
+  app.get("/projects/:id/spend", { schema: { tags: ["policy"], params: ProjectParams } }, async (request) => {
+    const { project } = await projectScope(request);
+    const [spend, policy] = await Promise.all([spendSummary(project.id), loadPolicy(project.id)]);
+    return { ...spend, budget: policy.budget };
   });
 
   app.get(

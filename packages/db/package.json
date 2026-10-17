@@ -7,11 +7,11 @@
   "types": "src/index.ts",
   "scripts": {
     "typecheck": "tsc -p tsconfig.json",
-    "generate": "dotenv -e ../../.env -- prisma generate",
+    "generate": "prisma generate",
     "migrate": "dotenv -e ../../.env -- prisma migrate deploy",
     "migrate:dev": "dotenv -e ../../.env -- prisma migrate dev",
     "seed": "tsx src/seed-cli.ts",
-    "postinstall": "prisma generate"
+    "postinstall": "prisma generate || echo \"[socialpilot] prisma generate was skipped (a running server may lock the engine). Stop npm run dev, then run: npm run db:generate\""
   },
   "dependencies": {
     "@prisma/client": "^6.1.0",

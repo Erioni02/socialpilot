@@ -15,17 +15,19 @@
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "eslint .",
     "test": "vitest run",
-    "e2e": "playwright test -c e2e/playwright.config.ts"
+    "e2e": "playwright test -c e2e/playwright.config.ts",
+    "db:generate": "npm run generate -w @sp/db"
   },
   "devDependencies": {
     "@eslint/js": "^9.17.0",
     "@types/node": "^22.10.2",
+    "concurrently": "^9.1.0",
+    "embedded-postgres": "17.9.0-beta.16",
     "eslint": "^9.17.0",
+    "globals": "^15.15.0",
     "typescript": "^5.7.2",
     "typescript-eslint": "^8.18.0",
-    "vitest": "^2.1.8",
-    "concurrently": "^9.1.0",
-    "embedded-postgres": "17.9.0-beta.16"
+    "vitest": "^2.1.8"
   },
   "workspaces": [
     "packages/*",
@@ -42,6 +44,7 @@
     "esbuild@0.21.5": true,
     "esbuild@0.28.2": true,
     "prisma@6.19.3": true,
-    "sharp@0.33.5": true
+    "sharp@0.33.5": true,
+    "esbuild@0.25.12": true
   }
 }

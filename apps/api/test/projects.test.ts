@@ -173,6 +173,16 @@ describe("AI providers", () => {
   });
 });
 
+describe("spend", () => {
+  it("reports today's and this month's spend against the budget", async () => {
+    const { project } = await createProject();
+    await prisma.spendLedger.create({ data: { projectId: project.id, category: "ai", amountUsd: 0.25 } });
+    await prisma.spendLedger.create({ data: { projectId: project.id, category: "ai", amountUsd: 1, at: new Date(Date.now() - 40 * 86_400_000) } });
+    const res = await app.inject({ method: "GET", url: `/api/projects/${project.id}/spend`, headers: s.headers });
+    expect(res.json()).toEqual({ todayAiUsd: 0.25, monthAiUsd: 0.25, todayMediaUsd: 0, budget: { dailyAiUsd: 1, monthlyAiUsd: 20, dailyMediaUsd: 0 } });
+  });
+});
+
 describe("emergency stop", () => {
   it("blocks write tools while on and is audited", async () => {
     const { project } = await createProject();
