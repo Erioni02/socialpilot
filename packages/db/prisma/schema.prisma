@@ -1,0 +1,329 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ProjectStatus {
+  draft
+  active
+  archived
+}
+
+enum IntegrationProvider {
+  instagram
+  tiktok
+  x
+  website_analytics
+  github
+  deployment
+  image_gen
+  video_gen
+  news
+}
+
+enum IntegrationStatus {
+  not_connected
+  needs_setup
+  connected
+  error
+  revoked
+}
+
+enum TaskStatus {
+  queued
+  running
+  awaiting_approval
+  succeeded
+  failed
+  cancelled
+}
+
+enum ApprovalStatus {
+  pending
+  approved
+  rejected
+  expired
+}
+
+enum ActorType {
+  user
+  agent
+  system
+  schedule
+}
+
+enum SpendCategory {
+  ai
+  media
+  api
+}
+
+enum BrandProfileSource {
+  ai_draft
+  user_edit
+}
+
+enum EventLevel {
+  info
+  warn
+  error
+}
+
+model User {
+  id           String            @id @default(cuid())
+  email        String            @unique
+  passwordHash String
+  name         String            @default("")
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  sessions     Session[]
+  memberships  WorkspaceMember[]
+  workspaces   Workspace[]       @relation("WorkspaceOwner")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tokenHash String   @unique
+  expiresAt DateTime
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model Workspace {
+  id               String             @id @default(cuid())
+  name             String
+  ownerId          String
+  owner            User               @relation("WorkspaceOwner", fields: [ownerId], references: [id])
+  emergencyStop    Boolean            @default(false)
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+  members          WorkspaceMember[]
+  projects         Project[]
+  aiProviders      AiProviderConfig[]
+  auditLogs        AuditLog[]
+}
+
+model WorkspaceMember {
+  id          String    @id @default(cuid())
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role        String    @default("owner")
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@unique([workspaceId, userId])
+}
+
+model Project {
+  id               String            @id @default(cuid())
+  workspaceId      String
+  workspace        Workspace         @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  name             String
+  slug             String
+  websiteUrl       String?
+  status           ProjectStatus     @default(draft)
+  logoUrl          String?
+  wizardStep       Int               @default(1)
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  brandProfiles    BrandProfile[]
+  websiteSnapshots WebsiteSnapshot[]
+  integrations     Integration[]
+  policy           ProjectPolicy?
+  tasks            Task[]
+  approvals        Approval[]
+  auditLogs        AuditLog[]
+  spend            SpendLedger[]
+
+  @@unique([workspaceId, slug])
+}
+
+model BrandProfile {
+  id               String             @id @default(cuid())
+  projectId        String
+  project          Project            @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  version          Int
+  source           BrandProfileSource
+  confirmedAt      DateTime?
+  description      String             @default("")
+  targetAudience   String             @default("")
+  industry         String             @default("")
+  productsServices Json               @default("[]")
+  objectives       Json               @default("[]")
+  voiceTone        String             @default("")
+  keyMessages      Json               @default("[]")
+  colors           Json               @default("[]")
+  competitors      Json               @default("[]")
+  notes            String             @default("")
+  createdAt        DateTime           @default(now())
+  updatedAt        DateTime           @updatedAt
+
+  @@unique([projectId, version])
+}
+
+model WebsiteSnapshot {
+  id           String   @id @default(cuid())
+  projectId    String
+  project      Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  rootUrl      String
+  fetchedAt    DateTime @default(now())
+  httpStatus   Int
+  responseMs   Int
+  pages        Json
+  issues       Json
+  brokenLinks  Json     @default("[]")
+  robotsTxt    String?
+  sitemapFound Boolean  @default(false)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@index([projectId, fetchedAt])
+}
+
+model Integration {
+  id                   String              @id @default(cuid())
+  projectId            String
+  project              Project             @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  provider             IntegrationProvider
+  status               IntegrationStatus   @default(not_connected)
+  accountLabel         String?
+  scopes               String[]            @default([])
+  capabilities         Json                @default("[]")
+  encryptedCredentials Bytes?
+  lastSyncAt           DateTime?
+  lastError            String?
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+
+  @@unique([projectId, provider])
+}
+
+model AiProviderConfig {
+  id             String    @id @default(cuid())
+  workspaceId    String
+  workspace      Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  provider       String
+  baseUrl        String
+  encryptedKeys  Bytes
+  keysPreview    String[]  @default([])
+  models         String[]  @default([])
+  order          Int       @default(0)
+  enabled        Boolean   @default(true)
+  lastTestAt     DateTime?
+  lastTestResult Json?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  @@index([workspaceId, order])
+}
+
+model ProjectPolicy {
+  id            String   @id @default(cuid())
+  projectId     String   @unique
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  autonomyLevel Int      @default(1)
+  permissions   Json
+  budget        Json
+  limits        Json
+  emergencyStop Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+}
+
+model Task {
+  id           String      @id @default(cuid())
+  projectId    String
+  project      Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  type         String
+  toolName     String
+  status       TaskStatus  @default(queued)
+  input        Json
+  output       Json?
+  error        String?
+  attempts     Int         @default(0)
+  costUsd      Float       @default(0)
+  parentTaskId String?
+  requestedBy  ActorType
+  actorId      String
+  startedAt    DateTime?
+  finishedAt   DateTime?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  events       TaskEvent[]
+  approvals    Approval[]
+
+  @@index([projectId, status])
+  @@index([projectId, createdAt])
+}
+
+model TaskEvent {
+  id      String     @id @default(cuid())
+  taskId  String
+  task    Task       @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  at      DateTime   @default(now())
+  level   EventLevel @default(info)
+  message String
+  data    Json?
+
+  @@index([taskId, at])
+}
+
+model Approval {
+  id        String         @id @default(cuid())
+  projectId String
+  project   Project        @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  taskId    String
+  task      Task           @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  toolName  String
+  payload   Json
+  reason    String
+  status    ApprovalStatus @default(pending)
+  decidedBy String?
+  decidedAt DateTime?
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([projectId, status])
+}
+
+model AuditLog {
+  id           String    @id @default(cuid())
+  workspaceId  String
+  workspace    Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  projectId    String?
+  project      Project?  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  actorType    ActorType
+  actorId      String
+  action       String
+  argsRedacted Json?
+  outcome      String
+  error        String?
+  at           DateTime  @default(now())
+
+  @@index([workspaceId, at])
+  @@index([projectId, at])
+}
+
+model SpendLedger {
+  id        String        @id @default(cuid())
+  projectId String
+  project   Project       @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  taskId    String?
+  category  SpendCategory
+  amountUsd Float
+  at        DateTime      @default(now())
+
+  @@index([projectId, at])
+}
