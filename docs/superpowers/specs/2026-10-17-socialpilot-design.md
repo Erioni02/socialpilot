@@ -4,6 +4,16 @@ Date: 2026-10-17
 Status: Approved in conversation; awaiting written-spec review
 Scope of this spec: overall architecture + roadmap, and the detailed design of **Cycle 1 (Foundation & Projects)**. Cycles 2–7 each get their own spec → plan → build cycle.
 
+> **Addendum 2026-10-18: no Docker.** At the owner's request the default workflow needs no Docker or container runtime. The changes, all keeping the architecture:
+> - Redis + BullMQ → **pg-boss** (a Postgres job queue with retries, singleton jobs and cron).
+> - Redis pub/sub → **Postgres LISTEN/NOTIFY** for SSE.
+> - Docker Compose → **Supabase** (via `DATABASE_URL`/`DIRECT_URL`) or an **embedded local PostgreSQL** (`npm run db:local`).
+> - pnpm → **npm workspaces**.
+> - Uploads use **Supabase Storage** when configured, otherwise the local disk.
+> - Production runs Node processes under pm2/NSSM behind a reverse proxy (see `docs/deployment.md`).
+>
+> Authentication stays built-in (argon2 sessions) rather than Supabase Auth. It's a single-owner app, and the server-side permission checks are keyed to these sessions on any Postgres. Where the sections below say Redis, BullMQ or Docker, read them with these substitutions.
+
 ---
 
 ## 1. Intent
