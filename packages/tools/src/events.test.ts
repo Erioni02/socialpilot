@@ -1,6 +1,6 @@
 import { afterAll, describe, expect, it } from "vitest";
 import { closeEvents, publishEvent, subscribeProject } from "./events";
-import { activeJobTaskIds, sendToolJob, stopBoss } from "./queue";
+import { activeJobTaskIds, getBoss, retryAbandonedJobs, sendToolJob, stopBoss, TOOLS_QUEUE } from "./queue";
 
 afterAll(async () => {
   await closeEvents();
@@ -27,5 +27,17 @@ describe("pg-boss queue", () => {
     await sendToolJob("task-abc");
     await sendToolJob("task-abc");
     expect((await activeJobTaskIds()).has("task-abc")).toBe(true);
+  }, 30_000);
+
+  it("sends jobs left active by a dead worker back for retry", async () => {
+    const boss = await getBoss();
+    await boss.getDb().executeSql("DELETE FROM pgboss.job WHERE name = $1", [TOOLS_QUEUE]);
+    await sendToolJob("task-abandoned");
+    const [job] = await boss.fetch<{ taskId: string }>(TOOLS_QUEUE); // now 'active', and nobody will finish it
+    expect(job).toBeTruthy();
+    const retried = await retryAbandonedJobs();
+    expect(retried).toBeGreaterThanOrEqual(1);
+    const state = await boss.getJobById(TOOLS_QUEUE, job!.id);
+    expect(state?.state).toBe("retry");
   }, 30_000);
 });

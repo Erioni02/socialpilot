@@ -25,9 +25,21 @@ describe("reconcile", () => {
     const withJob = await task("queued", 0);
     const enqueued: string[] = [];
 
-    const result = await reconcile({ activeJobs: async () => new Set([withJob.id]), enqueue: async (id) => void enqueued.push(id) });
+    const order: string[] = [];
+    const result = await reconcile({
+      retryAbandoned: async () => {
+        order.push("retryAbandoned");
+        return 0;
+      },
+      activeJobs: async () => {
+        order.push("activeJobs");
+        return new Set([withJob.id]);
+      },
+      enqueue: async (id) => void enqueued.push(id)
+    });
 
-    expect(result).toEqual({ requeued: 2, failed: 1 });
+    expect(order).toEqual(["retryAbandoned", "activeJobs"]);
+    expect(result).toEqual({ retriedJobs: 0, requeued: 2, failed: 1 });
     expect(enqueued.sort()).toEqual([a.id, c.id].sort());
     const byId = async (id: string) => prisma.task.findUniqueOrThrow({ where: { id } });
     expect((await byId(a.id)).status).toBe("queued");

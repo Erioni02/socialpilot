@@ -14,8 +14,8 @@ async function main() {
   registerCycle1Tools();
   const boss = await getBoss();
 
-  const { requeued, failed } = await reconcile();
-  if (requeued || failed) console.log(`[worker] reconciled: ${requeued} requeued, ${failed} failed`);
+  const { retriedJobs, requeued, failed } = await reconcile();
+  if (retriedJobs || requeued || failed) console.log(`[worker] reconciled: ${retriedJobs} interrupted jobs retried, ${requeued} requeued, ${failed} failed`);
 
   for (let i = 0; i < CONCURRENCY; i++) {
     await boss.work<{ taskId: string }>(TOOLS_QUEUE, { batchSize: 1, includeMetadata: true, pollingIntervalSeconds: 1 }, async ([job]) => {

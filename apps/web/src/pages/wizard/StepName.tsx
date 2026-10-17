@@ -11,11 +11,14 @@ export function StepName({ project, onCreated }: { project?: Project; onCreated:
   const queryClient = useQueryClient();
   const [name, setName] = useState(project?.name ?? "");
   const save = useMutation({
-    mutationFn: () =>
-      project ? api<Project>(`/projects/${project.id}`, { method: "PATCH", body: { name } }) : api<Project>("/projects", { method: "POST", body: { name } }),
-    onSuccess: async (p) => {
+    mutationFn: async () => {
+      if (project) return api<Project>(`/projects/${project.id}`, { method: "PATCH", body: { name } });
+      const created = await api<Project>("/projects", { method: "POST", body: { name } });
+      // Cache the project as it is after moving to step 2, so the wizard opens on the right step.
+      return api<Project>(`/projects/${created.id}`, { method: "PATCH", body: { wizardStep: 2 } });
+    },
+    onSuccess: (p) => {
       queryClient.setQueryData(keys.project(p.id), p);
-      if (!project) await api(`/projects/${p.id}`, { method: "PATCH", body: { wizardStep: 2 } });
       void queryClient.invalidateQueries({ queryKey: keys.projects });
       onCreated(p);
     }
