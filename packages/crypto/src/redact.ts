@@ -30,3 +30,10 @@ function maskAny(value: unknown): unknown {
 export function lastFour(secret: string): string {
   return secret.length <= 4 ? "••••" : `••••${secret.slice(-4)}`;
 }
+
+const CREDENTIAL_IN_TEXT = /\b(?:sk-|nvapi-|ghp_|github_pat_|xox[bp]-)[\w-]+|(?<=Bearer\s)\S+|\beyJ[\w-]+\.[\w-]+\.[\w-]+/g;
+
+/** Masks credential-shaped substrings inside a free-text message (errors, logs). */
+export function redactText(text: string): string {
+  return text.replace(CREDENTIAL_IN_TEXT, MASK);
+}

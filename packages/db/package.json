@@ -23,5 +23,9 @@
     "tsx": "^4.19.2",
     "dotenv": "^16.4.7",
     "dotenv-cli": "^8.0.0"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./testing": "./src/testing.ts"
   }
 }

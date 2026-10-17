@@ -34,3 +34,11 @@ describe("lastFour", () => {
     expect(lastFour("abc")).toBe("••••");
   });
 });
+
+describe("redactText", () => {
+  it("masks credentials embedded in free text", async () => {
+    const { redactText } = await import("./redact");
+    expect(redactText("401 for key nvapi-abc123XYZ and Authorization: Bearer abc.def")).toBe("401 for key [REDACTED] and Authorization: Bearer [REDACTED]");
+    expect(redactText("plain message")).toBe("plain message");
+  });
+});
