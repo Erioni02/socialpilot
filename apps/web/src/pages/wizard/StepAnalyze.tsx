@@ -37,6 +37,20 @@ export function SkipReason({ output }: { output: AnalyzeOutput }) {
           <div>The page has very little server-rendered text, so the AI couldn't infer a profile. Fill it manually.</div>
         </Alert>
       );
+    case "emergency_stop":
+      return (
+        <Alert variant="warning">
+          <AlertTriangle />
+          <div>The emergency stop is on, so the AI draft was skipped. Turn it off and re-analyze, or fill the profile manually.</div>
+        </Alert>
+      );
+    case "not_permitted":
+      return (
+        <Alert variant="warning">
+          <AlertTriangle />
+          <div>This project's permissions deny brand edits or AI spending, so the AI draft was skipped. Change it in Settings → Permissions, or fill the profile manually.</div>
+        </Alert>
+      );
     case "ai_failed":
       return (
         <Alert variant="destructive">
@@ -72,7 +86,8 @@ export function StepAnalyze({ project, next, back }: StepProps) {
 
   const task = detail.data?.task ?? latest;
   const events = detail.data?.events ?? [];
-  const running = !task || task.status === "queued" || task.status === "running";
+  // Before the first task exists we're "running" unless starting it failed — then show the error and let the user retry or move on.
+  const running = task ? task.status === "queued" || task.status === "running" : !analyze.isError;
   const output = task?.status === "succeeded" ? (task.output as AnalyzeOutput) : null;
   const fetched = events.filter((e) => e.message.startsWith("Fetched ")).length;
   const percent = output ? 100 : Math.min(95, (fetched / MAX_PAGES) * 80 + (events.some((e) => e.message.startsWith("Drafting")) ? 15 : 0));
@@ -83,14 +98,14 @@ export function StepAnalyze({ project, next, back }: StepProps) {
         <div className="flex items-center gap-3">
           {running ? <Loader2 className="size-5 animate-spin text-primary" /> : task?.status === "succeeded" ? <CheckCircle2 className="size-5 text-success" /> : <XCircle className="size-5 text-destructive" />}
           <div className="flex-1">
-            <p className="font-medium">{running ? `Analyzing ${project.websiteUrl}` : task?.status === "succeeded" ? "Analysis complete" : "Analysis failed"}</p>
+            <p className="font-medium">{running ? `Analyzing ${project.websiteUrl}` : task?.status === "succeeded" ? "Analysis complete" : task ? "Analysis failed" : "Couldn't start the analysis"}</p>
             <p className="text-xs text-muted-foreground">Crawls up to {MAX_PAGES} pages, runs basic SEO/accessibility checks, then drafts a brand profile.</p>
           </div>
         </div>
         <Progress value={percent} />
 
         <ol className="max-h-64 overflow-y-auto rounded-md border bg-muted/30 p-3 font-mono text-xs" aria-live="polite">
-          {events.length === 0 && <li className="text-muted-foreground">Waiting for the worker…</li>}
+          {events.length === 0 && <li className="text-muted-foreground">{running ? "Waiting for the worker…" : "No progress recorded."}</li>}
           {events.map((e) => (
             <li key={e.id} className={cn("py-0.5", e.level === "warn" && "text-warning", e.level === "error" && "text-destructive")}>
               {e.message}

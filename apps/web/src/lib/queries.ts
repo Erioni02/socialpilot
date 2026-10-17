@@ -1,6 +1,6 @@
 import { QueryClient, useQuery } from "@tanstack/react-query";
 import { api, ApiError } from "./api";
-import type { AiProvider, Approval, AuditEntry, BrandProfileDTO, Integration, Me, Policy, Project, ProjectListItem, ProviderCatalogItem, Spend, TaskDetail, TaskSummary, WebsiteSnapshot } from "./types";
+import type { AiProvider, Approval, AuditEntry, BrandProfileDTO, Integration, Me, Policy, Project, ProjectListItem, ProviderCatalogItem, ProviderFallback, Spend, TaskDetail, TaskSummary, WebsiteSnapshot } from "./types";
 
 export const queryClient = new QueryClient({
   defaultOptions: {
@@ -22,7 +22,8 @@ export const keys = {
   audit: (id: string) => ["project", id, "audit"] as const,
   spend: (id: string) => ["project", id, "spend"] as const,
   providers: ["ai-providers"] as const,
-  catalog: ["ai-providers", "catalog"] as const
+  catalog: ["ai-providers", "catalog"] as const,
+  fallback: ["ai-providers", "fallback"] as const
 };
 
 export const useMe = () => useQuery({ queryKey: keys.me, queryFn: () => api<Me>("/auth/me"), retry: false });
@@ -40,3 +41,4 @@ export const useAudit = (id: string) => useQuery({ queryKey: keys.audit(id), que
 export const useSpend = (id: string) => useQuery({ queryKey: keys.spend(id), queryFn: () => api<Spend>(`/projects/${id}/spend`) });
 export const useProviders = () => useQuery({ queryKey: keys.providers, queryFn: () => api<AiProvider[]>("/ai-providers") });
 export const useProviderCatalog = () => useQuery({ queryKey: keys.catalog, queryFn: () => api<ProviderCatalogItem[]>("/ai-providers/catalog"), staleTime: Infinity });
+export const useProviderFallback = () => useQuery({ queryKey: keys.fallback, queryFn: () => api<ProviderFallback>("/ai-providers/fallback") });

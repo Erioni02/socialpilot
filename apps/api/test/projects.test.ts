@@ -167,6 +167,20 @@ describe("AI providers", () => {
     expect(row.keysPreview).toEqual(["••••1111"]);
   });
 
+  it("reports which .env fallback providers exist, without their keys", async () => {
+    const saved = { ...process.env };
+    try {
+      Object.assign(process.env, { AI_PROVIDER_ORDER: "nvidia,ollama", NVIDIA_API_KEYS: "nvapi-secret-9999", OLLAMA_API_KEYS: "" });
+      const res = await app.inject({ method: "GET", url: "/api/ai-providers/fallback", headers: s.headers });
+      expect(res.json()).toEqual({ providers: [{ provider: "nvidia", keyCount: 1 }] });
+      expect(res.body).not.toContain("nvapi-secret-9999");
+      process.env.NVIDIA_API_KEYS = "";
+      expect((await app.inject({ method: "GET", url: "/api/ai-providers/fallback", headers: s.headers })).json()).toEqual({ providers: [] });
+    } finally {
+      process.env = saved;
+    }
+  });
+
   it("rejects a non-https or internal base URL", async () => {
     const res = await app.inject({ method: "POST", url: "/api/ai-providers", headers: s.headers, payload: { provider: "ollama", keys: ["k"], baseUrl: "http://169.254.169.254" } });
     expect(res.statusCode).toBe(400);

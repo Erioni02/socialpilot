@@ -196,4 +196,60 @@ describe("runTask", () => {
     expect(task.status).toBe("failed");
     expect(task.error).toMatch(/emergency stop/i);
   });
+
+  it("fails a DNS-not-found error immediately instead of retrying it", async () => {
+    registerTool({ name: "test.dns", description: "", input: z.object({}), output: z.object({}), capability: "website.read", minAutonomy: 1, approval: "never", runMode: "queued", run: async () => { throw new Error("getaddrinfo ENOTFOUND vibejudgee.app"); } });
+    const { taskId } = await executeTool({ ...scope(), actor: user }, "test.dns", {});
+    await expect(runTask(taskId, { attempt: 1, maxAttempts: 3 })).resolves.toBeUndefined();
+    expect(await prisma.task.findUniqueOrThrow({ where: { id: taskId } })).toMatchObject({ status: "failed", error: "getaddrinfo ENOTFOUND vibejudgee.app" });
+  });
+
+  it("turns a transient network error into a RetryableError and requeues the task", async () => {
+    registerTool({ name: "test.timeout", description: "", input: z.object({}), output: z.object({}), capability: "website.read", minAutonomy: 1, approval: "never", runMode: "queued", run: async () => { throw new Error("connect ETIMEDOUT 1.2.3.4:443"); } });
+    const { taskId } = await executeTool({ ...scope(), actor: user }, "test.timeout", {});
+    await expect(runTask(taskId, { attempt: 1, maxAttempts: 3 })).rejects.toBeInstanceOf(RetryableError);
+    expect((await prisma.task.findUniqueOrThrow({ where: { id: taskId } })).status).toBe("queued");
+  });
+
+  it("never overwrites a task the owner cancelled while it ran", async () => {
+    let id = "";
+    registerTool({
+      name: "test.cancelledThenFails", description: "", input: z.object({}), output: z.object({}), capability: "website.read", minAutonomy: 1, approval: "never", runMode: "queued",
+      run: async () => { await prisma.task.update({ where: { id }, data: { status: "cancelled" } }); throw new Error("provider exploded"); }
+    });
+    registerTool({
+      name: "test.cancelledThenSucceeds", description: "", input: z.object({}), output: z.object({}), capability: "website.read", minAutonomy: 1, approval: "never", runMode: "queued",
+      run: async () => { await prisma.task.update({ where: { id }, data: { status: "cancelled" } }); return {}; }
+    });
+    for (const name of ["test.cancelledThenFails", "test.cancelledThenSucceeds"]) {
+      id = (await executeTool({ ...scope(), actor: user }, name, {})).taskId;
+      await runTask(id);
+      expect((await prisma.task.findUniqueOrThrow({ where: { id } })).status, name).toBe("cancelled");
+    }
+  });
+
+  it("does not start a task that was cancelled before the worker picked it up", async () => {
+    const { taskId } = await executeTool({ ...scope(), actor: user }, "test.queued", {});
+    await prisma.task.update({ where: { id: taskId }, data: { status: "cancelled" } });
+    await runTask(taskId);
+    expect(await prisma.task.findUniqueOrThrow({ where: { id: taskId } })).toMatchObject({ status: "cancelled", attempts: 0 });
+  });
+
+  it("stops a running write task at its next step when the emergency stop is turned on", async () => {
+    registerTool({
+      name: "test.longWrite", description: "", input: z.object({}), output: z.object({}), capability: "brand.write", minAutonomy: 1, approval: "never", runMode: "queued",
+      run: async (ctx) => {
+        await ctx.emit("step 1");
+        await prisma.workspace.update({ where: { id: ws.id }, data: { emergencyStop: true } });
+        await ctx.emit("step 2");
+        if (ctx.signal.aborted) throw new Error("aborted");
+        return {};
+      }
+    });
+    const { taskId } = await executeTool({ ...scope(), actor: user }, "test.longWrite", {});
+    await runTask(taskId);
+    const task = await prisma.task.findUniqueOrThrow({ where: { id: taskId } });
+    expect(task.status).toBe("failed");
+    expect(task.error).toMatch(/emergency stop/i);
+  });
 });

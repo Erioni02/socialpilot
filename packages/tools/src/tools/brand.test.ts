@@ -60,6 +60,13 @@ describe("project.summary", () => {
   });
 });
 
+describe("project.summary during an emergency stop", () => {
+  it("is refused because it spends on AI", async () => {
+    await prisma.workspace.update({ where: { id: ws.id }, data: { emergencyStop: true } });
+    await expect(executeTool(scope(), "project.summary", {})).rejects.toMatchObject({ reason: "emergency_stop" });
+  });
+});
+
 describe("loadProviders", () => {
   it("decrypts enabled DB providers in order and ignores other workspaces", async () => {
     const other = await prisma.workspace.create({ data: { name: "other", ownerId: (await prisma.user.findFirstOrThrow()).id } });

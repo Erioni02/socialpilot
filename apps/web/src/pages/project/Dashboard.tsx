@@ -7,7 +7,7 @@ import { taskLabel, TaskList } from "@/components/TaskList";
 import { Button } from "@/components/ui/button";
 import { Alert, Badge, Card, CardContent, CardDescription, CardHeader, CardTitle, Progress, Skeleton } from "@/components/ui/primitives";
 import { api } from "@/lib/api";
-import { keys, useApprovals, useAudit, useIntegrations, useProfile, useProject, useProviders, useSpend, useTask, useTasks, useWebsite } from "@/lib/queries";
+import { keys, useApprovals, useAudit, useIntegrations, useProfile, useProject, useProviderFallback, useProviders, useSpend, useTask, useTasks, useWebsite } from "@/lib/queries";
 import type { ExecuteResult, WebsiteIssue } from "@/lib/types";
 import { timeAgo, usd } from "@/lib/utils";
 
@@ -119,6 +119,7 @@ export function Dashboard() {
   const website = useWebsite(id);
   const integrations = useIntegrations(id);
   const providers = useProviders();
+  const fallback = useProviderFallback();
   const approvals = useApprovals(id);
   const tasks = useTasks(id);
   const audit = useAudit(id);
@@ -176,7 +177,13 @@ export function Dashboard() {
             <span className="flex items-center gap-2 text-xs text-muted-foreground">
               <Bot className="size-3.5" /> AI providers
             </span>
-            <span className="text-lg font-semibold">{providers.data?.length ? `${workingProviders} of ${providers.data.length} working` : "Using .env keys"}</span>
+            <span className="text-lg font-semibold">
+              {providers.data?.length
+                ? `${workingProviders} of ${providers.data.length} working`
+                : fallback.data?.providers.length
+                  ? `From .env: ${fallback.data.providers.map((p) => p.provider).join(", ")}`
+                  : "None configured"}
+            </span>
             <Link to="/settings/ai-providers" className="text-xs text-primary hover:underline">
               Manage and test
             </Link>

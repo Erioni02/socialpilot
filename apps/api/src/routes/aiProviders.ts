@@ -1,4 +1,4 @@
-import { DEFAULT_BASE_URLS, DEFAULT_MODELS, PROVIDER_NAMES } from "@sp/ai";
+import { DEFAULT_BASE_URLS, DEFAULT_MODELS, PROVIDER_NAMES, providersFromEnv } from "@sp/ai";
 import { lastFour, sealJson } from "@sp/crypto";
 import { prisma, type AiProviderConfig } from "@sp/db";
 import { normalizeSiteUrl } from "@sp/shared";
@@ -54,6 +54,11 @@ export const aiProviderRoutes: FastifyPluginAsyncZod = async (app) => {
   app.get("/ai-providers/catalog", { schema: { tags: ["ai"] } }, async () =>
     PROVIDER_NAMES.map((name) => ({ provider: name, baseUrl: DEFAULT_BASE_URLS[name], models: DEFAULT_MODELS[name] }))
   );
+
+  // Which providers the AI falls back to from .env when none are saved here (names and key counts only).
+  app.get("/ai-providers/fallback", { schema: { tags: ["ai"] } }, async () => ({
+    providers: providersFromEnv().map((p) => ({ provider: p.name, keyCount: p.keys.length }))
+  }));
 
   app.post(
     "/ai-providers",

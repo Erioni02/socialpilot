@@ -112,6 +112,28 @@ describe("website.analyze", () => {
     expect(task.output).toMatchObject({ profileSkipped: "ai_failed", aiError: "All AI providers failed (last: HTTP 503)" });
   });
 
+  it("crawls but does not draft (no AI spend, no profile write) while the emergency stop is on", async () => {
+    await prisma.workspace.update({ where: { id: ws.id }, data: { emergencyStop: true } });
+    const task = await analyze();
+    expect(task.status).toBe("succeeded");
+    expect(task.output).toMatchObject({ pagesCrawled: 3, profileSkipped: "emergency_stop" });
+    expect(chat).not.toHaveBeenCalled();
+    expect(await prisma.brandProfile.count()).toBe(0);
+  });
+
+  it("does not draft when brand edits or AI spending are denied by policy", async () => {
+    for (const capability of ["brand.write", "spend.ai"]) {
+      await prisma.projectPolicy.upsert({
+        where: { projectId: project.id },
+        create: { projectId: project.id, permissions: { [capability]: "deny" }, budget: {}, limits: {} },
+        update: { permissions: { [capability]: "deny" } }
+      });
+      const task = await analyze();
+      expect(task.output, capability).toMatchObject({ profileSkipped: "not_permitted" });
+    }
+    expect(chat).not.toHaveBeenCalled();
+  });
+
   it("fails clearly when the project has no website", async () => {
     await prisma.project.update({ where: { id: project.id }, data: { websiteUrl: null } });
     const task = await analyze();

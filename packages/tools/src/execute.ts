@@ -1,6 +1,6 @@
 import { redact, redactText } from "@sp/crypto";
-import { getProject, prisma, type Prisma } from "@sp/db";
-import { READ_ONLY_CAPABILITIES } from "@sp/shared";
+import { getProject, prisma, type Prisma, type TaskStatus } from "@sp/db";
+import { READ_ONLY_CAPABILITIES, type Capability } from "@sp/shared";
 import { ZodError } from "zod";
 import { checkBudget } from "./budget";
 import { publishEvent, toTaskSummary } from "./events";
@@ -128,13 +128,22 @@ export async function executeTool(ctx: ExecuteContext, name: string, rawInput: u
 
 export type RunOptions = { attempt?: number; maxAttempts?: number; inline?: boolean };
 
-const isRetryable = (error: unknown) =>
-  error instanceof RetryableError || (error instanceof Error && /ECONNRESET|ETIMEDOUT|ENOTFOUND|EAI_AGAIN|socket hang up/i.test(error.message));
+/** Transient network failures worth retrying. DNS "not found" is permanent (usually a typo'd domain). */
+const TRANSIENT_NETWORK = /ECONNRESET|ETIMEDOUT|EAI_AGAIN|ECONNREFUSED|socket hang up|Timed out after/i;
+const isRetryable = (error: unknown) => error instanceof RetryableError || (error instanceof Error && TRANSIENT_NETWORK.test(error.message));
+
+/** Can a non-user step that writes or spends run right now? Used inside multi-step tools (e.g. analyze → draft). */
+export async function writeAllowed(workspaceId: string, projectId: string, capabilities: Capability[]): Promise<"ok" | "emergency_stop" | "not_permitted"> {
+  if (await isStopped(workspaceId, projectId)) return "emergency_stop";
+  const policy = await loadPolicy(projectId);
+  return capabilities.some((c) => policy.permissions[c] === "deny") ? "not_permitted" : "ok";
+}
 
 /**
  * Executes a stored task (worker entry point, also used for inline tools).
- * Retryable failures put the task back to `queued` and rethrow so the queue retries; the last attempt fails it.
- * Returns the output for inline runs; throws ToolFailedError when an inline run fails.
+ * Status changes are guarded (a cancelled task is never overwritten). The emergency stop and cancellation are
+ * re-checked at every emitted step. Transient failures put the task back to `queued` and throw RetryableError so the
+ * queue retries; the last attempt fails it. Returns the output for inline runs; throws ToolFailedError when one fails.
  */
 export async function runTask(taskId: string, opts: RunOptions = {}): Promise<unknown> {
   const { attempt = 1, maxAttempts = MAX_ATTEMPTS, inline = false } = opts;
@@ -145,29 +154,29 @@ export async function runTask(taskId: string, opts: RunOptions = {}): Promise<un
   const workspaceId = task.project.workspaceId;
   const actor: Actor = { type: task.requestedBy, id: task.actorId };
   const auditCtx: ExecuteContext = { workspaceId, projectId: task.projectId, actor };
+  const writes = tool ? !READ_ONLY_CAPABILITIES.has(tool.capability) : true;
 
-  const finish = async (data: Prisma.TaskUpdateInput) => {
-    const updated = await prisma.task.update({ where: { id: taskId }, data });
-    await publishEvent(task.projectId, { type: "task.updated", task: toTaskSummary(updated) });
-    return updated;
+  /** Applies `data` only if the task is still in one of `from`; returns false when it moved on (e.g. was cancelled). */
+  const transition = async (from: TaskStatus[], data: Prisma.TaskUpdateManyMutationInput) => {
+    const { count } = await prisma.task.updateMany({ where: { id: taskId, status: { in: from } }, data });
+    if (count) await publishEvent(task.projectId, { type: "task.updated", task: toTaskSummary(await prisma.task.findUniqueOrThrow({ where: { id: taskId } })) });
+    return count > 0;
   };
 
   const fail = async (message: string) => {
     const safe = redactText(message);
-    await finish({ status: "failed", error: safe, finishedAt: new Date() });
-    await audit(auditCtx, task.toolName, task.input, "failed", safe);
+    if (await transition(["queued", "running"], { status: "failed", error: safe, finishedAt: new Date() })) await audit(auditCtx, task.toolName, task.input, "failed", safe);
     if (inline) throw new ToolFailedError(safe);
     return undefined;
   };
 
   if (!tool) return fail(`Tool "${task.toolName}" is not available in this version`);
-  if (!READ_ONLY_CAPABILITIES.has(tool.capability) && (await isStopped(workspaceId, task.projectId))) {
-    return fail("Blocked by the emergency stop");
-  }
+  if (writes && (await isStopped(workspaceId, task.projectId))) return fail("Blocked by the emergency stop");
 
-  await finish({ status: "running", attempts: { increment: 1 }, startedAt: task.startedAt ?? new Date(), error: null });
+  if (!(await transition(["queued", "running"], { status: "running", attempts: { increment: 1 }, startedAt: task.startedAt ?? new Date(), error: null }))) return undefined;
 
   const controller = new AbortController();
+  let stoppedByEmergency = false;
   let cost = 0;
   const ctx: ToolContext = {
     workspaceId,
@@ -184,6 +193,10 @@ export async function runTask(taskId: string, opts: RunOptions = {}): Promise<un
       });
       const current = await prisma.task.findUnique({ where: { id: taskId }, select: { status: true } });
       if (current?.status === "cancelled") controller.abort();
+      else if (writes && (await isStopped(workspaceId, task.projectId))) {
+        stoppedByEmergency = true;
+        controller.abort();
+      }
     },
     async recordSpend(category, amountUsd) {
       if (amountUsd <= 0) return;
@@ -194,17 +207,18 @@ export async function runTask(taskId: string, opts: RunOptions = {}): Promise<un
 
   try {
     const output = tool.output.parse(await tool.run(ctx, tool.input.parse(task.input)));
-    const latest = await prisma.task.findUnique({ where: { id: taskId }, select: { status: true } });
-    if (latest?.status === "cancelled") return undefined;
-    await finish({ status: "succeeded", output: json(output), costUsd: { increment: cost }, finishedAt: new Date() });
-    await audit(auditCtx, task.toolName, task.input, "succeeded");
+    if (stoppedByEmergency) return fail("Stopped by the emergency stop");
+    if (await transition(["running"], { status: "succeeded", output: json(output), costUsd: { increment: cost }, finishedAt: new Date() })) {
+      await audit(auditCtx, task.toolName, task.input, "succeeded");
+    }
     return output;
   } catch (error) {
     if (cost) await prisma.task.update({ where: { id: taskId }, data: { costUsd: { increment: cost } } });
+    if (stoppedByEmergency) return fail("Stopped by the emergency stop");
     const message = error instanceof ZodError ? `Tool returned invalid output: ${error.issues[0]?.message}` : (error as Error).message;
     if (!inline && isRetryable(error) && attempt < maxAttempts) {
-      await finish({ status: "queued", error: redactText(`Attempt ${attempt} failed: ${message}`) });
-      throw error;
+      await transition(["running"], { status: "queued", error: redactText(`Attempt ${attempt} failed: ${message}`) });
+      throw error instanceof RetryableError ? error : new RetryableError(message);
     }
     return fail(message);
   }

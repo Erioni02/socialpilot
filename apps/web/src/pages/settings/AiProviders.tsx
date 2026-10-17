@@ -7,7 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Alert, Card, CardContent, Input, Label, Skeleton, Switch, Textarea } from "@/components/ui/primitives";
 import { Select } from "@/components/ui/select";
 import { api } from "@/lib/api";
-import { keys, useProviderCatalog, useProviders } from "@/lib/queries";
+import { keys, useProviderCatalog, useProviderFallback, useProviders } from "@/lib/queries";
 import type { AiProvider } from "@/lib/types";
 import { timeAgo } from "@/lib/utils";
 import { ProviderStatus } from "../wizard/StepProviders";
@@ -90,6 +90,8 @@ function ProviderDialog({ open, onOpenChange, editing }: { open: boolean; onOpen
 
 export function AiProviders() {
   const providers = useProviders();
+  const fallback = useProviderFallback();
+  const envNames = fallback.data?.providers.map((p) => `${p.provider} (${p.keyCount} key${p.keyCount === 1 ? "" : "s"})`).join(", ");
   const queryClient = useQueryClient();
   const [dialog, setDialog] = useState<{ open: boolean; editing: AiProvider | null }>({ open: false, editing: null });
   const [removing, setRemoving] = useState<AiProvider | null>(null);
@@ -133,8 +135,12 @@ export function AiProviders() {
 
       {providers.isPending && <Skeleton className="h-32" />}
       {providers.data?.length === 0 && (
-        <Alert variant="info" className="mb-4">
-          No providers saved yet. Keys in <code>.env</code> (NVIDIA_API_KEYS, OLLAMA_API_KEYS) are used as a fallback until you add one here.
+        <Alert variant={envNames ? "info" : "warning"} className="mb-4">
+          {envNames ? (
+            <>No providers saved yet. The AI is currently using keys from <code>.env</code>: {envNames}. Providers you add here take over from them.</>
+          ) : (
+            <>No AI provider is configured, so AI drafting and summaries can't run. Add one here, or set NVIDIA_API_KEYS / OLLAMA_API_KEYS in <code>.env</code>.</>
+          )}
         </Alert>
       )}
 

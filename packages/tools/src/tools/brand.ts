@@ -2,6 +2,7 @@ import { UNTRUSTED_SYSTEM_RULE, untrusted, type ChatMessage } from "@sp/ai";
 import { prisma, type BrandProfile, type Prisma } from "@sp/db";
 import { BrandDraftSchema, BrandProfileInputSchema, type BrandDraft, type BrandProfileDTO, type BrandProfileInput, type PageInfo, type ProfileSkipReason } from "@sp/shared";
 import { z } from "zod";
+import { writeAllowed } from "../execute";
 import { registerTool } from "../registry";
 import type { ToolContext } from "../types";
 import { deps } from "./deps";
@@ -128,6 +129,7 @@ export function registerBrandTools(): void {
         orderBy: { fetchedAt: "desc" }
       });
       if (!snapshot) throw new Error("Analyze the website first: there is no snapshot to draft from.");
+      if ((await writeAllowed(ctx.workspaceId, ctx.projectId, ["spend.ai"])) === "not_permitted") throw new Error("AI spending is denied for this project (Settings → Permissions).");
       const pages = snapshot.pages as PageInfo[];
       const blocker = draftBlocker(snapshot.httpStatus, pages);
       if (blocker === "fetch_blocked") throw new Error(`The site refused our crawler (HTTP ${snapshot.httpStatus}), so there is nothing to draft from.`);

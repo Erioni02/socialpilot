@@ -50,6 +50,7 @@ export type AiProvider = {
 };
 
 export type ProviderCatalogItem = { provider: string; baseUrl: string; models: string[] };
+export type ProviderFallback = { providers: { provider: string; keyCount: number }[] };
 
 export type Spend = { todayAiUsd: number; monthAiUsd: number; todayMediaUsd: number; budget: Policy["budget"] };
 
@@ -59,7 +60,7 @@ export type AnalyzeOutput = {
   issueCount: number;
   httpStatus: number;
   profileVersion?: number;
-  profileSkipped?: "no_ai_provider" | "fetch_blocked" | "thin_content" | "ai_failed";
+  profileSkipped?: "no_ai_provider" | "fetch_blocked" | "thin_content" | "ai_failed" | "emergency_stop" | "not_permitted";
   aiError?: string;
 };
 

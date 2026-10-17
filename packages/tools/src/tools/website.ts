@@ -1,7 +1,8 @@
 import { prisma, type Prisma } from "@sp/db";
 import { extractPage } from "@sp/integrations";
-import { normalizeSiteUrl, PageInfoSchema, type ProfileSkipReason } from "@sp/shared";
+import { normalizeSiteUrl, PageInfoSchema, PROFILE_SKIP_REASONS, type ProfileSkipReason } from "@sp/shared";
 import { z } from "zod";
+import { writeAllowed } from "../execute";
 import { registerTool } from "../registry";
 import { deps } from "./deps";
 import { draftBlocker, draftProfile } from "./brand";
@@ -12,7 +13,7 @@ const AnalyzeOutput = z.object({
   issueCount: z.number(),
   httpStatus: z.number(),
   profileVersion: z.number().optional(),
-  profileSkipped: z.enum(["no_ai_provider", "fetch_blocked", "thin_content", "ai_failed"]).optional(),
+  profileSkipped: z.enum(PROFILE_SKIP_REASONS).optional(),
   aiError: z.string().optional()
 });
 
@@ -57,6 +58,12 @@ export function registerWebsiteTools(): void {
       if (blocker) {
         await ctx.emit(blocker === "fetch_blocked" ? `The site answered HTTP ${crawl.httpStatus}; skipping the AI draft` : "Too little server-rendered text; skipping the AI draft", undefined, "warn");
         return skip(blocker);
+      }
+      // Crawling is read-only; drafting writes the profile and spends on AI, so it obeys the stop and deny rules.
+      const allowed = await writeAllowed(ctx.workspaceId, ctx.projectId, ["brand.write", "spend.ai"]);
+      if (allowed !== "ok") {
+        await ctx.emit(allowed === "emergency_stop" ? "Emergency stop is on; skipping the AI draft" : "Brand edits or AI spending are denied for this project; skipping the AI draft", undefined, "warn");
+        return skip(allowed);
       }
       if (!(await deps.loadProviders(ctx.workspaceId)).length) {
         await ctx.emit("No AI provider configured; skipping the AI draft", undefined, "warn");

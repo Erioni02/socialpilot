@@ -52,7 +52,7 @@ export async function retryAbandonedJobs(): Promise<number> {
   const instance = await getBoss();
   const result = (await instance.getDb().executeSql(`SELECT id FROM pgboss.job WHERE name = $1 AND state = 'active'`, [TOOLS_QUEUE])) as { rows: { id: string }[] };
   const ids = result.rows.map((r) => r.id);
-  if (ids.length) await instance.fail(TOOLS_QUEUE, ids, { message: "Worker restarted during execution" });
+  for (const id of ids) await instance.fail(TOOLS_QUEUE, id, { message: "Worker restarted during execution" });
   return ids.length;
 }
 

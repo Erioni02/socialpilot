@@ -14,7 +14,7 @@ export function registerProjectTools(): void {
     description: "Five-bullet AI summary of the project's brand profile and website findings.",
     input: z.object({}),
     output: SummaryOutput,
-    capability: "website.read",
+    capability: "spend.ai",
     minAutonomy: 1,
     approval: "never",
     runMode: "queued",

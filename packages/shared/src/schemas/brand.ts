@@ -40,5 +40,5 @@ export type BrandProfileDTO = BrandProfileInput & {
   createdAt: string;
 };
 
-export const PROFILE_SKIP_REASONS = ["no_ai_provider", "fetch_blocked", "thin_content", "ai_failed"] as const;
+export const PROFILE_SKIP_REASONS = ["no_ai_provider", "fetch_blocked", "thin_content", "ai_failed", "emergency_stop", "not_permitted"] as const;
 export type ProfileSkipReason = (typeof PROFILE_SKIP_REASONS)[number];

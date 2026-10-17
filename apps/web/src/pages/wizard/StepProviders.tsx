@@ -2,7 +2,7 @@ import { CheckCircle2, CircleAlert, CircleDashed } from "lucide-react";
 import { Link } from "react-router";
 import { Button } from "@/components/ui/button";
 import { Alert, Badge, Card, CardContent, Skeleton } from "@/components/ui/primitives";
-import { useProviders } from "@/lib/queries";
+import { useProviderFallback, useProviders } from "@/lib/queries";
 import type { AiProvider } from "@/lib/types";
 import { timeAgo } from "@/lib/utils";
 import type { StepProps } from "./Wizard";
@@ -29,6 +29,8 @@ export function ProviderStatus({ provider }: { provider: AiProvider }) {
 /** Step 6. AI providers are shared by the workspace; they're managed on their own settings page. */
 export function StepProviders({ next, back }: StepProps) {
   const providers = useProviders();
+  const fallback = useProviderFallback();
+  const envNames = fallback.data?.providers.map((p) => p.provider).join(", ");
   return (
     <Card>
       <CardContent className="grid gap-4 p-6">
@@ -37,8 +39,12 @@ export function StepProviders({ next, back }: StepProps) {
         </p>
         {providers.isPending && <Skeleton className="h-20" />}
         {providers.data?.length === 0 && (
-          <Alert variant="warning">
-            No AI providers are saved yet. If keys are set in <code>.env</code> (NVIDIA_API_KEYS / OLLAMA_API_KEYS) they are used as a fallback; add providers here to manage and test them.
+          <Alert variant={envNames ? "info" : "warning"}>
+            {envNames ? (
+              <>No providers are saved here yet; the AI is using keys from <code>.env</code> ({envNames}). Add providers to manage and test them in the app.</>
+            ) : (
+              <>No AI provider is configured. AI drafting and summaries won't run until you add one (or set keys in <code>.env</code>).</>
+            )}
           </Alert>
         )}
         <ul className="grid gap-2">

@@ -11,8 +11,14 @@ describe("handleToolJob", () => {
     expect(calls).toEqual([["t1", { attempt: 2 }]]);
   });
 
-  it("swallows non-retryable failures (runTask already recorded them on the task)", async () => {
-    await expect(handleToolJob(job(), async () => Promise.reject(new Error("character → not representable")))).resolves.toBeUndefined();
+  it("completes the job when runTask records a failure itself (it returns instead of throwing)", async () => {
+    await expect(handleToolJob(job(), async () => undefined)).resolves.toBeUndefined();
+  });
+
+  it("rethrows any error runTask throws as a plain ASCII error so pg-boss retries the job", async () => {
+    const error = await handleToolJob(job(), async () => Promise.reject(new Error("db write failed → retry"))).catch((e) => e);
+    expect(error).toBeInstanceOf(Error);
+    expect(error.message).toBe("Retryable failure for task t1");
   });
 
   it("rethrows retryable failures as a plain ASCII error so the queue retries safely", async () => {
