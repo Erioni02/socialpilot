@@ -1,0 +1,48 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: socialpilot
+      POSTGRES_USER: sp
+      POSTGRES_PASSWORD: sp
+    ports: ["5432:5432"]
+    volumes: [pgdata:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sp -d socialpilot"]
+      interval: 5s
+      retries: 10
+  redis:
+    image: redis:7
+    ports: ["6379:6379"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
+
+  api:
+    profiles: [prod]
+    build: { context: ., dockerfile: apps/api/Dockerfile }
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://sp:sp@postgres:5432/socialpilot
+      REDIS_URL: redis://redis:6379
+    depends_on: { postgres: { condition: service_healthy }, redis: { condition: service_healthy } }
+    volumes: [storage:/app/storage]
+  worker:
+    profiles: [prod]
+    build: { context: ., dockerfile: apps/worker/Dockerfile }
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql://sp:sp@postgres:5432/socialpilot
+      REDIS_URL: redis://redis:6379
+    depends_on: { postgres: { condition: service_healthy }, redis: { condition: service_healthy } }
+    volumes: [storage:/app/storage]
+  web:
+    profiles: [prod]
+    build: { context: ., dockerfile: apps/web/Dockerfile }
+    ports: ["80:80"]
+    depends_on: [api]
+
+volumes:
+  pgdata:
+  storage:
