@@ -10,7 +10,8 @@ import { parse, userOf } from "../lib/http";
 const publicUser = (u: { id: string; email: string; name: string; emergencyStop: boolean; createdAt: Date }) => ({ id: u.id, email: u.email, name: u.name, emergencyStop: u.emergencyStop, createdAt: u.createdAt });
 
 export default async function authRoutes(app: FastifyInstance) {
-  const strict = { config: { rateLimit: { max: 10, timeWindow: "1 minute" } } };
+  // Brute-force protection; relaxed only for the automated test suite.
+  const strict = { config: { rateLimit: { max: config.NODE_ENV === "test" ? 500 : 10, timeWindow: "1 minute" } } };
 
   app.get("/auth/config", async () => {
     const users = await prisma.user.count();

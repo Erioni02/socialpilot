@@ -10,6 +10,8 @@ import { fmtNum, titleCase, toastError } from "@/lib/utils";
 import { axisProps, CHART, Legend, SERIES_COLORS, shortDate, tooltipProps } from "@/components/insights/shared";
 import { SocialSection, type SocialAccount } from "@/components/insights/SocialSection";
 import { WebSection, type WebResponse } from "@/components/insights/WebSection";
+import { TrafficPanel } from "@/components/insights/TrafficPanel";
+import { useProject } from "@/components/common";
 
 type CampaignPerf = {
   id: string;
@@ -288,6 +290,7 @@ function HypList({ icon, title, items }: { icon: React.ReactNode; title: string;
 // ───────────── Page ─────────────
 export default function Analytics() {
   const { projectId } = useParams() as { projectId: string };
+  const proj = useProject(projectId).data;
   const [days, setDays] = React.useState(28);
   const social = useQuery({ queryKey: ["analytics", projectId, "social"], queryFn: () => api.get<{ accounts: SocialAccount[] }>(p(projectId, "/analytics/social")) });
   const web = useQuery({
@@ -318,6 +321,7 @@ export default function Analytics() {
         <section>
           <SectionIntro title="Website">Sessions, users and conversions from your web analytics provider. These are visits to your site — not social reach.</SectionIntro>
           <WebSection projectId={projectId} data={web.data} loading={web.isLoading || web.isFetching} days={days} onDays={setDays} />
+          <TrafficPanel projectId={projectId} defaultDomain={proj?.project?.websiteUrl} />
         </section>
 
         <section>

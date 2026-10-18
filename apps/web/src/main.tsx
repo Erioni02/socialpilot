@@ -11,6 +11,7 @@ import { LoginPage, RegisterPage } from "@/pages/Auth";
 import ProjectsHome from "@/pages/ProjectsHome";
 import NewProject from "@/pages/NewProject";
 import DiscoverPage from "@/pages/Discover";
+import IntelPage from "@/pages/Intel";
 import SettingsPage from "@/pages/settings/Settings";
 import ProjectSetup from "@/pages/project/Setup";
 import Dashboard from "@/pages/project/Dashboard";
@@ -63,6 +64,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
             <Route index element={<ProjectsHome />} />
             <Route path="/projects/new" element={<NewProject />} />
             <Route path="/discover" element={<DiscoverPage />} />
+            <Route path="/intel" element={<IntelPage />} />
             <Route path="/settings" element={<SettingsPage />} />
             <Route path="/projects/:projectId">
               <Route index element={<Dashboard />} />

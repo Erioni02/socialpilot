@@ -32,7 +32,7 @@ export async function startEventListener() {
       for (const s of subscribers) {
         if (event.projectId && !s.projectIds.has(event.projectId)) continue;
         if (event.userId && event.userId !== s.userId) continue;
-        if (!event.projectId && !event.userId && event.type !== "discover.updated") continue;
+        if (!event.projectId && !event.userId && event.type !== "discover.updated" && event.type !== "intel.updated") continue;
         s.send(event);
       }
     });

@@ -142,3 +142,47 @@
     transition-duration: 0.01ms !important;
   }
 }
+
+/* Dark scope used by the Social Intel dashboard. Re-maps the theme tokens so every shared component adapts. */
+.intel-dark {
+  --color-canvas: #0d0e10;
+  --color-surface: #15171a;
+  --color-subtle: #1a1c20;
+  --color-line: #272a2f;
+  --color-line-strong: #383c43;
+  --color-ink: #f2f2ef;
+  --color-ink-2: #d4d4cf;
+  --color-muted: #96968f;
+  --color-faint: #66665f;
+  --color-red-bg: #3a1d1e;
+  --color-red-fg: #f2a6a3;
+  --color-blue-bg: #13293a;
+  --color-blue-fg: #93cdf2;
+  --color-green-bg: #182d1b;
+  --color-green-fg: #a3d6a3;
+  --color-yellow-bg: #362c12;
+  --color-yellow-fg: #eed086;
+  --color-purple-bg: #261f3a;
+  --color-purple-fg: #c6b2f2;
+  --color-gray-bg: #23252a;
+  --color-gray-fg: #b6b6b0;
+  background: var(--color-canvas);
+  color: var(--color-ink-2);
+  color-scheme: dark;
+}
+.intel-dark * {
+  border-color: var(--color-line);
+}
+.intel-dark .bg-ink {
+  color: #0d0e10;
+}
+.intel-dark .bg-ink.text-white,
+.intel-dark .bg-ink .text-white {
+  color: #0d0e10;
+}
+.intel-dark .hover\:bg-\[\#333\]:hover {
+  background-color: #d8d8d3;
+}
+.intel-dark ::selection {
+  background: #13293a;
+}

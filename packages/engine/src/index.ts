@@ -25,3 +25,4 @@ export * from "./agents/runner";
 export * from "./automation/service";
 export * from "./scheduler";
 export * from "./jobs";
+export * from "./intel/service";

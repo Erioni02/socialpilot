@@ -24,6 +24,7 @@ import {
   Play,
   List,
   FolderSimple,
+  Binoculars,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
@@ -225,6 +226,9 @@ export function AppShell() {
         <div className="mt-5 pt-4 border-t border-line space-y-px">
           <NavLink to={projectId ? `/discover?project=${projectId}` : "/discover"} className={({ isActive }) => cn("flex items-center gap-2.5 rounded-md px-2.5 py-[7px] text-[13px]", isActive ? "bg-black/[0.055] text-ink font-medium" : "text-ink-2 hover:bg-black/[0.035]")}>
             <Compass size={16} weight="bold" className="opacity-80" /> Discover
+          </NavLink>
+          <NavLink to="/intel" className={({ isActive }) => cn("flex items-center gap-2.5 rounded-md px-2.5 py-[7px] text-[13px]", isActive ? "bg-black/[0.055] text-ink font-medium" : "text-ink-2 hover:bg-black/[0.035]")}>
+            <Binoculars size={16} weight="bold" className="opacity-80" /> Social Intel
           </NavLink>
           <NavLink to="/settings" className={({ isActive }) => cn("flex items-center gap-2.5 rounded-md px-2.5 py-[7px] text-[13px]", isActive ? "bg-black/[0.055] text-ink font-medium" : "text-ink-2 hover:bg-black/[0.035]")}>
             <GearSix size={16} weight="bold" className="opacity-80" /> Settings & AI providers

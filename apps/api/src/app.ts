@@ -21,6 +21,7 @@ import engagementRoutes from "./routes/engagement";
 import operationsRoutes from "./routes/operations";
 import eventRoutes from "./routes/events";
 import publicRoutes from "./routes/public";
+import intelRoutes from "./routes/intel";
 
 export async function buildApp(opts: { logger?: boolean } = {}) {
   const app = Fastify({
@@ -76,6 +77,7 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
       await api.register(engagementRoutes);
       await api.register(operationsRoutes);
       await api.register(eventRoutes);
+      await api.register(intelRoutes);
     },
     { prefix: "/api" },
   );

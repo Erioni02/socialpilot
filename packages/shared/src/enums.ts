@@ -19,7 +19,7 @@ export const AI_PROVIDERS = ["nvidia", "anthropic", "openai", "gemini", "cloudfl
 export type AiProviderId = (typeof AI_PROVIDERS)[number];
 
 /** Non-AI data providers that use API keys (search / news / measurement). */
-export const DATA_PROVIDERS = ["newsapi", "producthunt", "pagespeed", "github_public"] as const;
+export const DATA_PROVIDERS = ["apify", "newsapi", "producthunt", "pagespeed", "github_public"] as const;
 export type DataProviderId = (typeof DATA_PROVIDERS)[number];
 
 export const POST_TYPES = ["text", "thread", "image", "carousel", "video", "reel"] as const;

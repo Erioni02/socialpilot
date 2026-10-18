@@ -310,6 +310,7 @@ export const AI_PROVIDER_CATALOG: Record<AiProviderId, AiProviderCatalogEntry> =
 };
 
 export const DATA_PROVIDER_CATALOG: Record<DataProviderId, { name: string; envVar: string; description: string; docsUrl: string }> = {
+  apify: { name: "Apify (paid, opt-in)", envVar: "APIFY_API_TOKEN", description: "Website traffic estimates and optional Instagram/TikTok scrapes. Runs only when you confirm a request, with a spend cap.", docsUrl: "https://console.apify.com/settings/integrations" },
   newsapi: { name: "NewsAPI", envVar: "NEWSAPI_KEY", description: "Headline and keyword news search.", docsUrl: "https://newsapi.org/docs" },
   producthunt: { name: "Product Hunt", envVar: "PRODUCTHUNT_TOKEN", description: "Today's launches via the GraphQL API v2.", docsUrl: "https://api.producthunt.com/v2/docs" },
   pagespeed: { name: "PageSpeed Insights", envVar: "PAGESPEED_API_KEY", description: "Lighthouse performance & accessibility measurements.", docsUrl: "https://developers.google.com/speed/docs/insights/v5/get-started" },

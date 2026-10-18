@@ -11,6 +11,7 @@
   "dependencies": {
     "@socialpilot/core": "workspace:*",
     "@socialpilot/shared": "workspace:*",
+    "apify-client": "2.25.0",
     "cheerio": "^1.1.2",
     "fast-xml-parser": "^5.2.5",
     "zod": "^3.25.76"

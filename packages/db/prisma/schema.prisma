@@ -689,3 +689,82 @@ model Job {
   @@index([status, runAt])
   @@index([projectId, createdAt])
 }
+
+// ───────────────────────────── Social intel (public data) ─────────────────────────────
+
+/// A public profile or post being analyzed / watched. Data comes only from public or user-approved sources.
+model IntelEntity {
+  id            String    @id @default(cuid())
+  userId        String
+  projectId     String?
+  platform      String // tiktok | instagram | x
+  kind          String // profile | post
+  externalId    String // handle for profiles, post id for posts
+  handle        String?
+  url           String
+  title         String?
+  avatarUrl     String?
+  watched       Boolean   @default(false)
+  lastFetchedAt DateTime?
+  lastStatus    String? // ok | partial | unavailable | error
+  lastError     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  snapshots IntelSnapshot[]
+
+  @@unique([userId, platform, kind, externalId])
+  @@index([userId, watched])
+}
+
+/// One successful retrieval. Values are only what the source returned; missing metrics are listed, never zero-filled.
+model IntelSnapshot {
+  id          String      @id @default(cuid())
+  entityId    String
+  entity      IntelEntity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  source      String // tiktok-public-page | x-syndication | apify-instagram | apify-tiktok
+  confidence  String // exact | rounded | partial
+  metrics     Json // { views: { value, approx } ... }
+  profile     Json?
+  posts       Json?
+  unavailable Json        @default("[]")
+  costUsd     Float       @default(0)
+  capturedAt  DateTime    @default(now())
+
+  @@index([entityId, capturedAt])
+}
+
+model IntelSearch {
+  id        String   @id @default(cuid())
+  userId    String
+  url       String
+  platform  String?
+  kind      String?
+  ok        Boolean
+  status    String?
+  error     String?
+  entityId  String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, createdAt])
+}
+
+/// Third-party traffic estimates (Apify actor). Runs only on explicit user request with a spend cap.
+model WebTrafficReport {
+  id         String    @id @default(cuid())
+  userId     String
+  projectId  String?
+  domain     String
+  status     String    @default("queued") // queued | running | completed | failed
+  maxBudget  Float
+  data       Json?
+  error      String?
+  costUsd    Float?
+  apifyRunId String?
+  datasetId  String?
+  createdAt  DateTime  @default(now())
+  finishedAt DateTime?
+
+  @@index([projectId, createdAt])
+  @@index([userId, createdAt])
+}

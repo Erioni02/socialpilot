@@ -92,3 +92,31 @@ Token based. Create an access token at vercel.com/account/tokens and enter the p
 **Model roles:** each project picks a provider and model for *Main AI*, *Thinking & planning*, *Vision*, *Fast tasks*, *Image generation* and *Video generation* (Project settings → AI). Main models without native vision get attachments described by the vision model, and agents have an `analyze_media` tool that sends images, or FFmpeg-sampled video frames, to the vision model.
 
 Model IDs are free text in project AI settings, so newer models can be used without code changes. Cost estimates for budget enforcement are in `packages/shared/src/pricing.ts`.
+
+---
+
+## Social Intel (public profiles and posts)
+
+**Social Intel** in the sidebar analyzes public TikTok, Instagram and X URLs without logging in to those platforms. Each data source is a separate adapter (`packages/integrations/src/intel/providers.ts`), so any one of them can be replaced. Every result carries a source label and a confidence level (`exact`, `rounded` or `partial`). A metric a source can't provide is listed as unavailable and never filled in with zero.
+
+| Platform / URL | Free source | What you get | Not available for free |
+|---|---|---|---|
+| TikTok video | Public video page (logged-out page data) | Plays, likes, comments, shares, saves, publish time, caption; creator followers/likes/videos (rounded by TikTok) | Reach, watch time, demographics |
+| TikTok profile | — (TikTok shows a verification page to non-browser clients) | Creator totals are captured whenever you analyze any of their videos | Profile post list (paid Apify option) |
+| X post | X's public embedded-post data | Likes, replies, text, date, author | Views, reposts, quotes (paid X API only) |
+| X profile | — | — | Followers and post counts (paid X API only). Connect your own account for official metrics |
+| Instagram post / Reel / profile | — (login wall; Basic Display API was discontinued) | — | Use the official API for your own professional account, or the paid Apify option |
+
+- **No evasion:** requests send an honest user agent, use no proxies, never solve CAPTCHAs and never use cookies or logins. These free sources can stop working whenever a platform changes its pages; when that happens the app reports it rather than guessing.
+- **Watchlist:** watched items get a snapshot about every 6 hours from **free sources only**. Charts and change tables use snapshots SocialPilot itself recorded; those changes are not unique viewers.
+- **Exports:** CSV export includes every snapshot. Missing metrics stay blank.
+
+### Paid, opt-in sources (Apify)
+
+With an Apify token (Settings → Data sources, or `APIFY_API_TOKEN`) you can run these. **Each request needs a confirmation and has a hard spend cap; the app never runs them on a schedule.**
+
+- **Instagram Scraper** (`apify/instagram-scraper`, about $2.30–2.70 per 1,000 results): profile details plus recent posts, or a single post/Reel.
+- **TikTok Scraper** (`clockworks/tiktok-scraper`, from $1.70 per 1,000 results): profile plus recent videos.
+- **Website traffic estimate** (`santhej/website-traffic-intel`, about $0.16 per domain): an SEO estimate of monthly organic search traffic, ranking keywords and search competitors. It's an estimate, not measured visits. It appears on each project's Analytics page and under Social Intel → Website traffic.
+
+On Apify's free plan, usage draws on the monthly free credit and stops at the plan limit.

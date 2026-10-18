@@ -122,3 +122,28 @@ describe("projects", () => {
     expect(res.statusCode).toBe(403);
   });
 });
+
+describe("social intel safety", () => {
+  it("rejects paid sources and traffic reports without explicit confirmation", async () => {
+    const a = await registerUser("intel");
+    const paid = await app.inject({ method: "POST", url: "/api/intel/analyze", headers: req(a.cookie), payload: { url: "https://www.instagram.com/natgeo/", paidProvider: "apify-instagram" } });
+    expect(paid.statusCode).toBe(400);
+    expect(paid.json().error).toMatch(/confirmation/);
+    const traffic = await app.inject({ method: "POST", url: "/api/intel/traffic", headers: req(a.cookie), payload: { domain: "vibejudge.app", maxBudgetUsd: 0.3 } });
+    expect(traffic.statusCode).toBe(400);
+    const tooMuch = await app.inject({ method: "POST", url: "/api/intel/analyze", headers: req(a.cookie), payload: { url: "https://www.instagram.com/natgeo/", paidProvider: "apify-instagram", confirmPaid: true, maxChargeUsd: 50 } });
+    expect(tooMuch.statusCode).toBe(400);
+  });
+  it("validates URLs and isolates tracked items per user", async () => {
+    const a = await registerUser("intel-a");
+    const b = await registerUser("intel-b");
+    const bad = await app.inject({ method: "POST", url: "/api/intel/analyze", headers: req(a.cookie), payload: { url: "https://example.com/x" } });
+    expect(bad.statusCode).toBe(200);
+    expect(bad.json().outcome.status).toBe("error");
+    const ent = await prisma.intelEntity.create({ data: { userId: a.user.id, platform: "x", kind: "post", externalId: "20", url: "https://x.com/jack/status/20" } });
+    expect((await app.inject({ method: "GET", url: `/api/intel/entities/${ent.id}`, headers: req(b.cookie) })).statusCode).toBe(404);
+    expect((await app.inject({ method: "GET", url: `/api/intel/entities/${ent.id}`, headers: req(a.cookie) })).statusCode).toBe(200);
+    const csv = await app.inject({ method: "GET", url: "/api/intel/export.csv", headers: req(b.cookie) });
+    expect(csv.body).not.toContain("jack");
+  });
+});
