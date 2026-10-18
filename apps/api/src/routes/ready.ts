@@ -10,6 +10,7 @@ import {
   postedPerformance,
   readMetricsScreenshot,
   readyToPost,
+  refreshPostedWithRapid,
   saveOwnerMetrics,
   sendToDesk,
   sniffMime,
@@ -68,6 +69,12 @@ export default async function readyRoutes(app: FastifyInstance) {
     const t = await prisma.postTarget.findFirst({ where: { id: targetId, post: { projectId: req.project.id }, status: "published" } });
     if (!t) throw badRequest("Not a posted item");
     return trackPostedTarget({ targetId });
+  });
+
+  /** Live Instagram/X numbers from the RapidAPI statistics API (uses 1 request of the monthly budget). */
+  app.post("/projects/:projectId/posted/:targetId/refresh-rapidapi", P, async (req) => {
+    const { targetId } = req.params as { targetId: string };
+    return refreshPostedWithRapid(req.project, targetId, userOf(req).id);
   });
 
   app.put("/projects/:projectId/posted/:targetId/metrics", P, async (req) => {

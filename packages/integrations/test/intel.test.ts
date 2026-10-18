@@ -71,8 +71,8 @@ describe("paid providers are opt-in", () => {
     });
     const r = await analyzeSocialUrl("https://www.instagram.com/natgeo/");
     expect(r.outcome.status).toBe("unavailable");
-    expect(r.outcome.paidOptions?.map((p) => p.provider)).toEqual(["socialcrawl-instagram", "apify-instagram"]);
-    expect(calls.some((c) => /apify.com|socialcrawl|postpeer/.test(c))).toBe(false);
+    expect(r.outcome.paidOptions?.map((p) => p.provider)).toEqual(["rapidapi-stats", "socialcrawl-instagram", "apify-instagram"]);
+    expect(calls.some((c) => /apify.com|socialcrawl|postpeer|rapidapi/.test(c))).toBe(false);
   });
   it("passes the spend cap to Apify and maps profile data", async () => {
     let url = "";

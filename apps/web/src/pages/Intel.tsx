@@ -32,6 +32,7 @@ import {
 } from "@/components/ui";
 import { TrafficPanel } from "@/components/insights/TrafficPanel";
 import { PulsePanel } from "@/components/insights/PulsePanel";
+import { AudiencePanel, RapidApiCard, useRapidStatus, type AudienceInsights } from "@/components/insights/Audience";
 
 type MV = { value: number; approx?: boolean };
 type Metrics = Partial<Record<string, MV>>;
@@ -52,18 +53,22 @@ type Outcome = {
     unavailable: { metric: string; reason: string }[];
     sourceLabel: string;
     confidence: string;
+    audience?: AudienceInsights;
   };
   paidOptions?: PaidOption[];
 };
-type SourceKey = "apify" | "socialcrawl" | "postpeer";
-type PaidOption = { provider: string; label: string; requires: SourceKey; estimatedCostUsd?: number; estimatedCredits?: number; note: string };
+type SourceKey = "apify" | "socialcrawl" | "postpeer" | "rapidapi";
+type PaidOption = { provider: string; label: string; requires: SourceKey; estimatedCostUsd?: number; estimatedCredits?: number; estimatedRequests?: number; note: string };
 type IntelConfig = { apifyConfigured: boolean; maxPaidChargeUsd: number; sources?: Record<SourceKey, boolean> };
-const SOURCE_NAME: Record<SourceKey, string> = { apify: "Apify token", socialcrawl: "SocialCrawl key", postpeer: "PostPeer key" };
-const costLabel = (p: PaidOption) => (p.estimatedCredits != null ? `${p.estimatedCredits} credit${p.estimatedCredits === 1 ? "" : "s"}` : `≈ ${fmtUsd(p.estimatedCostUsd ?? 0)}`);
+const SOURCE_NAME: Record<SourceKey, string> = { apify: "Apify token", socialcrawl: "SocialCrawl key", postpeer: "PostPeer key", rapidapi: "RapidAPI key" };
+const costLabel = (p: PaidOption) =>
+  p.estimatedRequests != null ? `${p.estimatedRequests} request${p.estimatedRequests === 1 ? "" : "s"} of your monthly plan` : p.estimatedCredits != null ? `${p.estimatedCredits} credit${p.estimatedCredits === 1 ? "" : "s"}` : `≈ ${fmtUsd(p.estimatedCostUsd ?? 0)}`;
 
 /** Live credit balance for credit-based sources (free call). */
 function CreditBalance({ source }: { source: SourceKey }) {
-  const q = useQuery({ queryKey: ["intel", "balance", source], queryFn: () => api.get<{ credits: number }>(`/intel/balance/${source}`), enabled: source !== "apify", staleTime: 30_000, retry: false });
+  const q = useQuery({ queryKey: ["intel", "balance", source], queryFn: () => api.get<{ credits: number }>(`/intel/balance/${source}`), enabled: source === "socialcrawl" || source === "postpeer", staleTime: 30_000, retry: false });
+  const rapid = useRapidStatus();
+  if (source === "rapidapi") return rapid.data ? <span className="text-muted">{rapid.data.budgetLeft} requests left in your monthly budget ({rapid.data.used} used)</span> : null;
   if (source === "apify") return null;
   if (q.isLoading) return <span className="text-muted">checking balance…</span>;
   if (q.error) return <span className="text-red-fg">balance unavailable</span>;
@@ -283,6 +288,12 @@ function AnalyzeBox({ onAnalyzed }: { onAnalyzed: (entityId: string | null) => v
                     </div>
                   </div>
                 )}
+                {r.audience && (
+                  <div className="rounded-lg border border-line p-4">
+                    <div className="text-[13px] font-semibold text-ink mb-3">Account quality & audience</div>
+                    <AudiencePanel a={r.audience} />
+                  </div>
+                )}
                 {!!r.posts?.length && <PostsTable posts={r.posts.map((p) => ({ ...p, platform: r.platform }))} />}
                 {r.unavailable.length > 0 && (
                   <div className="text-[12px] text-muted space-y-0.5">
@@ -330,7 +341,9 @@ function AnalyzeBox({ onAnalyzed }: { onAnalyzed: (entityId: string | null) => v
           paid
             ? paid.requires === "apify"
               ? `${paid.label} — ${paid.note}. Estimated ≈ ${fmtUsd(paid.estimatedCostUsd ?? 0)}, charged to your Apify account. Runs once; it is never scheduled automatically.`
-              : `${paid.label} — ${paid.note}. Uses up to ${costLabel(paid)} from your ${paid.label} account (failed and not-found lookups are refunded). Runs once; it is never scheduled automatically.`
+              : paid.requires === "rapidapi"
+                ? `${paid.label} — ${paid.note}. Uses ${costLabel(paid)}. Runs once now.`
+                : `${paid.label} — ${paid.note}. Uses up to ${costLabel(paid)} from your ${paid.label} account (failed and not-found lookups are refunded). Runs once; it is never scheduled automatically.`
             : ""
         }
         confirmLabel="Fetch now"
@@ -454,6 +467,12 @@ function EntityDetail({ id, onClose }: { id: string; onClose: () => void }) {
             <div className="flex flex-wrap items-center gap-2 text-[12px] text-muted">
               Latest snapshot {fmtDate(data.latest.capturedAt)} · <ConfidenceBadge c={data.latest.confidence} /> · {data.latest.source}
             </div>
+            {data.audience && (
+              <div className="rounded-lg border border-line p-4">
+                <div className="text-[13px] font-semibold text-ink mb-3">Account quality & audience <span className="text-[11.5px] font-normal text-muted">· looked up {fmtDate(data.audience.capturedAt)}</span></div>
+                <AudiencePanel a={data.audience} />
+              </div>
+            )}
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2">
               {Object.entries(data.latest.metrics as Metrics).map(([k, v]) => (
                 <MetricTile key={k} k={k} v={v} />
@@ -584,6 +603,7 @@ export default function IntelPage() {
 
         <AnalyzeBox onAnalyzed={(id) => id && set("entity", id)} />
         <PostPeerPanel />
+        <RapidApiCard />
 
         {entityId && <EntityDetail id={entityId} onClose={() => set("entity", null)} />}
 
@@ -626,7 +646,7 @@ export default function IntelPage() {
                   </Card>
                 </div>
                 <div className="text-[11.5px] text-faint">Last updated {ago(d.lastUpdated)} · totals only include posts whose source reports that metric.</div>
-                <div className="grid lg:grid-cols-[1fr_360px] gap-4">
+                <div className="grid lg:grid-cols-[minmax(0,1fr)_360px] gap-4">
                   <Card>
                     <CardHeader title="Top-performing posts" description="Ranked by views, or likes when views aren't available." />
                     <CardBody>{d.topPosts.length ? <PostsTable posts={d.topPosts.map((p: any) => ({ ...p, entityId: p.id, text: p.title }))} onOpen={(id) => set("entity", id)} /> : <Empty title="No posts analyzed yet" />}</CardBody>

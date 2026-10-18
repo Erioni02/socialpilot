@@ -5,7 +5,7 @@ import { badRequest, config, redactString } from "@socialpilot/core";
 import { postpeerAccounts, postpeerBalance, socialcrawlBalance } from "@socialpilot/integrations";
 import { listNvidiaModels, listOllamaModels, testProvider } from "@socialpilot/ai";
 import { AI_PROVIDER_CATALOG, AGENT_LABELS, AUTONOMY_LABELS, CAPABILITY_REGISTRY, DATA_PROVIDER_CATALOG, INTEGRATION_CATALOG, PERMISSION_LABELS, providerCredentialSchema } from "@socialpilot/shared";
-import { audit, credentialStatus, getProviderCreds, validateBaseUrl, fetchCustomModels, listProviderSettings, saveProviderSettings, ffmpeg, getCustomProvider, listCustomProviders, resolveSecret, saveCredential, saveCustomProvider } from "@socialpilot/engine";
+import { rapidStatus, audit, credentialStatus, getProviderCreds, validateBaseUrl, fetchCustomModels, listProviderSettings, saveProviderSettings, ffmpeg, getCustomProvider, listCustomProviders, resolveSecret, saveCredential, saveCustomProvider } from "@socialpilot/engine";
 import { CUSTOM_PROVIDER_PRESETS, isCustomProvider } from "@socialpilot/shared";
 import { parse, userOf } from "../lib/http";
 
@@ -135,7 +135,11 @@ export default async function systemRoutes(app: FastifyInstance) {
       if (provider in AI_PROVIDER_CATALOG) {
         message = await testProvider(provider, { apiKey: secret.apiKey ?? "", accountId: secret.accountId, baseUrl: secret.baseUrl });
       }
-      else if (provider === "socialcrawl") {
+      else if (provider === "rapidapi") {
+        // Any call to this API uses one of the monthly requests, so the key is verified on first real use.
+        const st = await rapidStatus(user.id);
+        message = st.limit != null ? `Saved — last known quota: ${st.remaining}/${st.limit} requests left this month (budget ${st.settings.monthlyBudget}). Verified on first use; testing would spend a request.` : "Saved — verified on first use (a test call would spend one of your monthly requests).";
+      } else if (provider === "socialcrawl") {
         message = `Connected — ${await socialcrawlBalance(secret.apiKey!)} credits left`;
       } else if (provider === "postpeer") {
         const [credits, accounts] = await Promise.all([postpeerBalance(secret.apiKey!), postpeerAccounts(secret.apiKey!)]);

@@ -7,6 +7,7 @@ export * from "./urls";
 export * from "./types";
 export * from "./providers";
 export * from "./credit-sources";
+export * from "./rapidapi-stats";
 
 const cache = new Map<string, { at: number; outcome: IntelOutcome }>();
 const CACHE_MS = 10 * 60_000;
@@ -17,7 +18,7 @@ const CACHE_MS = 10 * 60_000;
  */
 export async function analyzeSocialUrl(
   raw: string,
-  opts: { paidProvider?: string; apifyToken?: string; socialcrawlKey?: string; postpeerKey?: string; maxChargeUsd?: number; bypassCache?: boolean } = {},
+  opts: { paidProvider?: string; apifyToken?: string; socialcrawlKey?: string; postpeerKey?: string; rapidapiKey?: string; maxChargeUsd?: number; bypassCache?: boolean } = {},
 ): Promise<{ parsed?: ParsedSocialUrl; outcome: IntelOutcome }> {
   let parsed: ParsedSocialUrl;
   try {
@@ -34,7 +35,7 @@ export async function analyzeSocialUrl(
   if (!provider) return { parsed, outcome: { status: "error", message: opts.paidProvider ? `${opts.paidProvider} does not support this URL.` : "No data source supports this URL." } };
   let outcome: IntelOutcome;
   try {
-    outcome = await provider.fetch(parsed, { apifyToken: opts.apifyToken, socialcrawlKey: opts.socialcrawlKey, postpeerKey: opts.postpeerKey, maxChargeUsd: opts.maxChargeUsd });
+    outcome = await provider.fetch(parsed, { apifyToken: opts.apifyToken, socialcrawlKey: opts.socialcrawlKey, postpeerKey: opts.postpeerKey, rapidapiKey: opts.rapidapiKey, maxChargeUsd: opts.maxChargeUsd });
   } catch (e) {
     const msg = e instanceof ProviderError ? e.message : (e as Error).message;
     outcome = { status: (e as ProviderError).status === 429 ? "rate_limited" : "error", message: `${provider.label} failed: ${msg}` };

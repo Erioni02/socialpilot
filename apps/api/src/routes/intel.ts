@@ -13,6 +13,8 @@ import {
   listIntelEntities,
   MAX_PAID_CHARGE_USD,
   paidSourceBalance,
+  rapidStatus,
+  saveRapidSettings,
   getPulseSettings,
   listPulse,
   pulseCreditsToday,
@@ -58,6 +60,13 @@ export default async function intelRoutes(app: FastifyInstance) {
     const user = userOf(req);
     const projectId = await ownedProjectId(user.id, body.projectId);
     return analyzeIntelUrl(user.id, { ...body, projectId });
+  });
+
+  /** RapidAPI Instagram Statistics API: quota (from the provider's own headers), budget and auto-tracking switch. */
+  app.get("/intel/rapidapi", A, async (req) => rapidStatus(userOf(req).id));
+  app.put("/intel/rapidapi/settings", A, async (req) => {
+    await saveRapidSettings(userOf(req).id, req.body);
+    return rapidStatus(userOf(req).id);
   });
 
   /** Remaining credits on a credit-based source (free call). */

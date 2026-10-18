@@ -10,6 +10,7 @@ import { api, p } from "@/lib/api";
 import { cn, fmtNum, toastError } from "@/lib/utils";
 import { onServerEvent } from "@/hooks/useEvents";
 import { axisProps, CHART, Legend, SERIES_COLORS, TimeAgo, tooltipProps } from "./shared";
+import { RapidApiCard, useRapidStatus } from "./Audience";
 
 type MetricMap = Record<string, number | null>;
 type PostedPost = {
@@ -136,6 +137,17 @@ function MetricsDialog({ projectId, post, open, onOpenChange }: { projectId: str
     },
     onError: (e) => toastError(e),
   });
+  const rapid = useRapidStatus();
+  const live = useMutation({
+    mutationFn: () => api.post<{ metrics: Record<string, { value: number }> }>(p(projectId, `/posted/${post.targetId}/refresh-rapidapi`)),
+    onSuccess: (r) => {
+      setValues((v) => ({ ...v, ...Object.fromEntries(Object.entries(r.metrics).map(([k, m]) => [k, String(m.value)])) }));
+      toast.success("Live numbers saved from the statistics API");
+      invalidate();
+      qc.invalidateQueries({ queryKey: ["intel", "rapidapi"] });
+    },
+    onError: (e) => toastError(e),
+  });
   const undo = useMutation({
     mutationFn: () => api.post(p(projectId, `/ready/${post.targetId}/unpost`)),
     onSuccess: () => {
@@ -222,9 +234,20 @@ function MetricsDialog({ projectId, post, open, onOpenChange }: { projectId: str
                   e.target.value = "";
                 }}
               />
-              <Button size="sm" className="ml-auto" loading={read.isPending} onClick={() => fileRef.current?.click()}>
-                <Camera size={13} /> Read screenshot
-              </Button>
+              <div className="ml-auto flex gap-1.5">
+                {rapid.data?.configured && (post.platform === "instagram" || post.platform === "x") && post.url && (
+                  <Tooltip content={`Live ${post.platform === "x" ? "views, likes, replies, reposts" : "likes, comments, views"} from the statistics API · 1 request (${rapid.data.budgetLeft} left this month)`}>
+                    <span>
+                      <Button size="sm" loading={live.isPending} disabled={rapid.data.budgetLeft < 1} onClick={() => live.mutate()}>
+                        <ArrowsClockwise size={13} /> Live numbers
+                      </Button>
+                    </span>
+                  </Tooltip>
+                )}
+                <Button size="sm" loading={read.isPending} onClick={() => fileRef.current?.click()}>
+                  <Camera size={13} /> Read screenshot
+                </Button>
+              </div>
             </div>
             {reading && (
               <div className={cn("flex gap-2 text-[12px] rounded-md px-3 py-2", reading.confidence === "high" ? "bg-green-bg text-green-fg" : "bg-yellow-bg text-yellow-fg")}>
@@ -464,6 +487,7 @@ export function PostPerformance({ projectId }: { projectId: string }) {
           </div>
         </>
       )}
+      <RapidApiCard />
       {open && <MetricsDialog projectId={projectId} post={open} open={!!open} onOpenChange={(v) => !v && setOpen(null)} />}
     </div>
   );

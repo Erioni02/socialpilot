@@ -136,8 +136,8 @@ You don't need to connect any social account or developer app to publish and mea
 | Platform | Collected automatically (free, public) | Add yourself (screenshot read by AI or typed) |
 |---|---|---|
 | TikTok | Views, likes, comments, shares, saves | Reach, watch time, profile visits, follows |
-| X | Likes, replies | Views/impressions, reposts, bookmarks, link clicks |
-| Instagram | — (login wall, no public data) | Everything from Insights: views, reach, likes, comments, shares, saves, profile visits, follows |
+| X | Likes, replies (free); views and reposts with a RapidAPI key | Bookmarks, link clicks |
+| Instagram | With a RapidAPI key: likes, comments, views (live, at 1/3/7 days) | Reach, shares, saves, profile visits, follows (Insights screenshot) |
 
 **Screenshot import:** in a post's detail, click *Read screenshot* and upload the platform's analytics screen. The vision model reads only the visible numbers (abbreviations like 1.2K are flagged), and you confirm or correct them before saving. Values you add are never overwritten by automatic refreshes, and unknown values stay empty, never zero. The report shows totals, engagement rate (engagements ÷ views), per-platform breakdown, top posts and best posting days/hours once there is enough data. Agents read it with `get_post_performance` and `list_ready_to_post`.
 
@@ -170,6 +170,16 @@ Reddit, TikTok, Instagram and X have no free logged-out trend source (or they bl
 - **No evasion:** requests send an honest user agent, use no proxies, never solve CAPTCHAs and never use cookies or logins. These free sources can stop working whenever a platform changes its pages; when that happens the app reports it rather than guessing.
 - **Watchlist:** watched items get a snapshot every 20 minutes from **free sources only**. Charts and change tables use snapshots SocialPilot itself recorded; those changes are not unique viewers.
 - **Exports:** CSV export includes every snapshot. Missing metrics stay blank.
+
+### Instagram Statistics API (RapidAPI)
+
+Add your RapidAPI key (Settings → Data sources, or `RAPIDAPI_KEY`) and subscribe to [Instagram Statistics API](https://rapidapi.com/artemlipko/api/instagram-statistics-api). It covers Instagram, TikTok and X:
+
+- **Social Intel → any profile URL:** followers, average engagement rate, likes/views per post, **quality score**, **fake followers**, follower growth (180 days), audience types (real / mass followers / suspicious), **audience countries, cities, gender and age**, brand-safety flags and the latest posts. 1 request per lookup, after you confirm.
+- **Instagram post URLs:** live likes, comments and views (*Post by URL*), 1 request.
+- **Your posted content (Analytics → Post performance):** Instagram posts get live likes, comments and views, and X posts get views and reposts from the account feed. This runs automatically at 1, 3 and 7 days after posting (toggle *Auto-track*) or with the *Live numbers* button. TikTok stays on the free public source.
+
+**Quota and cost:** every request counts. The Basic plan is 50 requests/month with a **hard limit** (no overage), and paid plans bill overage. SocialPilot reads the quota headers on every response, shows usage against your **monthly budget** (default 45), and never goes over it. Automatic tracking also keeps 5 requests in reserve for your own lookups. Each request is logged in the audit log. The provider updates popular accounts daily and less popular ones weekly to monthly; data dates are shown with each result.
 
 ### Paid, opt-in sources
 

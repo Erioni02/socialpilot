@@ -10,7 +10,9 @@ import { audit } from "../infra/audit";
 import { emit } from "../infra/events";
 import { enqueue } from "../infra/queue";
 import { aiJson, hasTextAI } from "../ai/service";
-import { recordOwnerMetrics, snapshotUrl } from "../intel/service";
+import { recordOwnerMetrics, recordSourcedMetrics, snapshotUrl } from "../intel/service";
+import { dueRapidMilestone, getRapidSettings, rapidPostMetrics, rapidStatus } from "../intel/rapidapi";
+import { getApiKey } from "../infra/credentials";
 import { refreshPostStatus, schedulePost } from "./publishing";
 import { renderPlatformText } from "./service";
 import type { Actor } from "../projects/context";
@@ -245,18 +247,53 @@ export async function trackPostedTarget(payload: { targetId: string }) {
   const project = t.post.project;
   const state = (t.providerState ?? {}) as Record<string, unknown>;
   const r = await snapshotUrl(project.ownerId, project.id, t.remoteUrl);
+  let ok = r.outcome.status === "ok" || r.outcome.status === "partial";
+  let note: string | null = ok ? null : (r.outcome.message ?? null);
+  const rapidDone = ((state.rapidMilestones as number[]) ?? []).slice();
+  // Instagram (no public data) and X (no public views): live numbers from RapidAPI at 1, 3 and 7 days, within budget.
+  if (r.entityId && (t.platform === "instagram" || t.platform === "x") && t.publishedAt && (await getApiKey(project.ownerId, "rapidapi")) && (await getRapidSettings(project.ownerId)).autoTracking) {
+    const due = dueRapidMilestone(t.publishedAt, rapidDone);
+    if (due != null) {
+      try {
+        const m = await rapidPostMetrics(project.ownerId, t.remoteUrl, { automatic: true, publishedAt: t.publishedAt });
+        if (Object.keys(m.metrics).length) {
+          await recordSourcedMetrics(project.ownerId, r.entityId, m.metrics, m.source);
+          ok = true;
+          note = null;
+        }
+        rapidDone.push(due);
+      } catch (e) {
+        log.info(`rapidapi tracking skipped for ${t.id}: ${(e as Error).message}`);
+        if (!ok) note = (e as Error).message;
+        // Budget stops are retried at the next run; other failures don't retry the same milestone forever.
+        if (!/budget|paused/i.test((e as Error).message)) rapidDone.push(due);
+      }
+    }
+  }
   const latest = r.entityId ? await prisma.intelSnapshot.findFirst({ where: { entityId: r.entityId }, orderBy: { capturedAt: "desc" } }) : null;
-  const ok = r.outcome.status === "ok" || r.outcome.status === "partial";
   await prisma.postTarget.update({
     where: { id: t.id },
     data: {
       // Newest automatic values win; owner-entered metrics the free source can't see (e.g. X views) are kept.
       ...(latest ? { metrics: { ...ownerKeys(t.metrics), ...metricsOf(latest), _source: latest.source, _confidence: latest.confidence } as unknown as Prisma.InputJsonValue, metricsAt: latest.capturedAt } : {}),
-      providerState: { ...state, intelEntityId: r.entityId ?? state.intelEntityId ?? null, tracking: ok ? "auto" : "owner_input", trackingNote: ok ? null : (r.outcome.message ?? null), lastTrackAt: new Date().toISOString() } as Prisma.InputJsonValue,
+      providerState: { ...state, intelEntityId: r.entityId ?? state.intelEntityId ?? null, tracking: ok ? "auto" : "owner_input", trackingNote: note, rapidMilestones: rapidDone, lastTrackAt: new Date().toISOString() } as Prisma.InputJsonValue,
     },
   });
   await emit({ type: "post.updated", projectId: project.id, data: { id: t.postId } });
   return { status: r.outcome.status };
+}
+
+/** Manual "refresh with RapidAPI" for one posted Instagram/X post (uses 1 request from the monthly budget). */
+export async function refreshPostedWithRapid(project: Project, targetId: string, userId: string) {
+  const { target, entityId } = await trackedEntity(project, targetId);
+  const m = await rapidPostMetrics(project.ownerId, target.remoteUrl!, { automatic: false, publishedAt: target.publishedAt ?? undefined });
+  if (!Object.keys(m.metrics).length) throw badRequest("The statistics API returned no metrics for this post.");
+  const snap = await recordSourcedMetrics(project.ownerId, entityId, m.metrics, m.source);
+  const merged = { ...ownerKeys(target.metrics), ...m.metrics, _source: snap.source, _confidence: "exact" };
+  await prisma.postTarget.update({ where: { id: target.id }, data: { metrics: merged as unknown as Prisma.InputJsonValue, metricsAt: snap.capturedAt, providerState: { ...((target.providerState ?? {}) as object), tracking: "auto", trackingNote: null } as Prisma.InputJsonValue } });
+  await audit({ userId, projectId: project.id, actor: "user", action: "post.metrics_rapidapi", target: target.id });
+  await emit({ type: "post.updated", projectId: project.id, data: { id: target.postId } });
+  return { metrics: m.metrics, status: await rapidStatus(project.ownerId) };
 }
 
 /** Scheduler: enqueue tracked posts that are due by their cadence. */
@@ -451,8 +488,8 @@ export async function postedPerformance(project: Project, days = 30) {
     timing,
     coverage: {
       tiktok: "Views, likes, comments, shares and saves are read automatically from the public video page.",
-      x: "Likes and replies are read automatically. Views, reposts and bookmarks: add them from a screenshot of the post's analytics or enter them.",
-      instagram: "Instagram shows no public data without login. Add metrics from an Insights screenshot (read by AI, confirmed by you) or enter them; or connect your professional account for automatic insights.",
+      x: "Likes and replies are read automatically. With a RapidAPI key, views and reposts are added at 1, 3 and 7 days (once the provider has collected the post). Bookmarks: screenshot or manual entry.",
+      instagram: "Instagram shows no public data without login. With a RapidAPI key, likes, comments and views are read live at 1, 3 and 7 days (or on demand). Owner-only numbers (reach, saves, shares) come from an Insights screenshot or manual entry.",
     },
   };
 }

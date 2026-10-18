@@ -15,6 +15,7 @@ import {
   type MetricValue,
 } from "@socialpilot/integrations";
 import { getApiKey } from "../infra/credentials";
+import { assertRapidBudget, recordRapidUse } from "./rapidapi";
 import { audit, notify } from "../infra/audit";
 import { emit } from "../infra/events";
 import { enqueue } from "../infra/queue";
@@ -63,7 +64,7 @@ async function saveSnapshot(entityId: string, r: { source: string; confidence: s
 async function persist(userId: string, projectId: string | null, outcome: IntelOutcome, costUsd = 0) {
   const r = outcome.result!;
   const entity = await upsertEntity(userId, projectId, r, outcome.status);
-  const snapshot = await saveSnapshot(entity.id, { source: r.source, confidence: r.confidence, metrics: r.metrics, profile: r.profile, posts: r.posts, unavailable: r.unavailable, costUsd });
+  const snapshot = await saveSnapshot(entity.id, { source: r.source, confidence: r.confidence, metrics: r.metrics, profile: r.audience ? { ...r.profile, audience: r.audience } : r.profile, posts: r.posts, unavailable: r.unavailable, costUsd });
   if (r.author && r.author.profile.handle && Object.keys(r.author.metrics).length) {
     const creator = await upsertEntity(userId, projectId, { platform: r.platform, kind: "profile", externalId: r.author.profile.handle, url: `https://www.tiktok.com/@${r.author.profile.handle}`, title: r.author.profile.displayName, profile: r.author.profile }, "partial");
     const approx = Object.values(r.author.metrics).some((m) => m?.approx);
@@ -87,7 +88,8 @@ export interface AnalyzeInput {
   maxChargeUsd?: number;
 }
 
-const PAID_KEY: Record<string, { key: "apify" | "socialcrawl" | "postpeer"; name: string }> = {
+const PAID_KEY: Record<string, { key: "apify" | "socialcrawl" | "postpeer" | "rapidapi"; name: string }> = {
+  "rapidapi-stats": { key: "rapidapi", name: "RapidAPI key" },
   "apify-instagram": { key: "apify", name: "Apify API token" },
   "apify-tiktok": { key: "apify", name: "Apify API token" },
   "socialcrawl-tiktok": { key: "socialcrawl", name: "SocialCrawl API key" },
@@ -97,8 +99,8 @@ const PAID_KEY: Record<string, { key: "apify" | "socialcrawl" | "postpeer"; name
 
 /** Which paid data sources the user has keys for (keys never leave the server). */
 export async function paidSourceStatus(userId: string) {
-  const [apify, socialcrawl, postpeer] = await Promise.all([getApiKey(userId, "apify"), getApiKey(userId, "socialcrawl"), getApiKey(userId, "postpeer")]);
-  return { apify: !!apify, socialcrawl: !!socialcrawl, postpeer: !!postpeer };
+  const [apify, socialcrawl, postpeer, rapidapi] = await Promise.all([getApiKey(userId, "apify"), getApiKey(userId, "socialcrawl"), getApiKey(userId, "postpeer"), getApiKey(userId, "rapidapi")]);
+  return { apify: !!apify, socialcrawl: !!socialcrawl, postpeer: !!postpeer, rapidapi: !!rapidapi };
 }
 
 /** Free balance lookups so the confirmation dialog can show remaining credits. */
@@ -124,6 +126,7 @@ export async function analyzeIntelUrl(userId: string, input: AnalyzeInput) {
   let apifyToken: string | undefined;
   let socialcrawlKey: string | undefined;
   let postpeerKey: string | undefined;
+  let rapidapiKey: string | undefined;
   let maxChargeUsd: number | undefined;
   if (input.paidProvider) {
     if (input.confirmPaid !== true) throw badRequest("Paid sources need explicit confirmation for each request.");
@@ -135,9 +138,13 @@ export async function analyzeIntelUrl(userId: string, input: AnalyzeInput) {
       apifyToken = key;
       maxChargeUsd = Math.min(Math.max(input.maxChargeUsd ?? 0.1, 0.01), MAX_PAID_CHARGE_USD);
     } else if (need.key === "socialcrawl") socialcrawlKey = key;
-    else postpeerKey = key;
+    else if (need.key === "rapidapi") {
+      await assertRapidBudget(userId, 1);
+      rapidapiKey = key;
+    } else postpeerKey = key;
   }
-  const { parsed, outcome } = await analyzeSocialUrl(input.url, { paidProvider: input.paidProvider, apifyToken, socialcrawlKey, postpeerKey, maxChargeUsd });
+  const { parsed, outcome } = await analyzeSocialUrl(input.url, { paidProvider: input.paidProvider, apifyToken, socialcrawlKey, postpeerKey, rapidapiKey, maxChargeUsd });
+  if (input.paidProvider === "rapidapi-stats") await recordRapidUse(userId, outcome.quota, "intel_lookup", { url: input.url, status: outcome.status });
   const ok = outcome.status === "ok" || outcome.status === "partial";
   let entity: IntelEntity | null = null;
   if (ok && outcome.result) {
@@ -183,6 +190,10 @@ export async function getIntelEntity(userId: string, id: string) {
     snapshots: snaps.slice(-100).reverse(),
     series,
     changes: deltas(snaps).slice(-50).reverse(),
+    audience: ((): unknown => {
+      const withAudience = [...snaps].reverse().find((x) => (x.profile as any)?.audience);
+      return withAudience ? { ...(withAudience.profile as any).audience, capturedAt: withAudience.capturedAt } : null;
+    })(),
     relatedPosts: related.map((p) => ({ id: p.id, url: p.url, title: p.title, latest: p.snapshots[0] ? { capturedAt: p.snapshots[0].capturedAt, metrics: p.snapshots[0].metrics, source: p.snapshots[0].source } : null })),
   };
 }
@@ -391,13 +402,18 @@ export async function snapshotUrl(userId: string, projectId: string | null, url:
 
 /** Metrics the owner entered or confirmed (e.g. read from an Insights screenshot). Stored as a snapshot with its source. */
 export async function recordOwnerMetrics(userId: string, entityId: string, metrics: Metrics, source: "manual" | "screenshot", note?: string) {
+  return recordSourcedMetrics(userId, entityId, metrics, source === "manual" ? "Entered by you" : "Read from your Insights screenshot (confirmed by you)", note);
+}
+
+/** Stores metrics from a named source as a dated snapshot of a tracked entity. */
+export async function recordSourcedMetrics(userId: string, entityId: string, metrics: Metrics, sourceLabel: string, note?: string) {
   const entity = await prisma.intelEntity.findFirst({ where: { id: entityId, userId } });
   if (!entity) throw notFound("Tracked post");
   const clean: Metrics = {};
   for (const [k, v] of Object.entries(metrics)) if (v && Number.isFinite(v.value) && v.value >= 0) clean[k as MetricKey] = { value: Math.round(v.value) };
   if (!Object.keys(clean).length) throw badRequest("Enter at least one metric");
   const snapshot = await saveSnapshot(entity.id, {
-    source: source === "manual" ? "Entered by you" : "Read from your Insights screenshot (confirmed by you)",
+    source: sourceLabel,
     confidence: "exact",
     metrics: clean,
     unavailable: note ? [{ metric: "note", reason: note.slice(0, 300) }] : [],

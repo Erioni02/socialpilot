@@ -1,5 +1,6 @@
 import { ProviderError, safeFetch } from "@socialpilot/core";
 import { postpeerX, socialcrawlCredits, socialcrawlInstagram, socialcrawlTiktok } from "./credit-sources";
+import { rapidStats } from "./rapidapi-stats";
 import type { IntelOutcome, IntelPost, IntelProvider, IntelResult, MetricKey, MetricValue, PaidOption } from "./types";
 import type { ParsedSocialUrl } from "./urls";
 
@@ -344,16 +345,28 @@ export const apifyTiktok: IntelProvider = {
 };
 
 export const FREE_PROVIDERS: IntelProvider[] = [tiktokPublicPage, tiktokProfileUnavailable, xSyndication, xProfileUnavailable, instagramUnavailable];
-export const PAID_PROVIDERS: IntelProvider[] = [socialcrawlTiktok, socialcrawlInstagram, postpeerX, apifyInstagram, apifyTiktok];
-export const PAID_PROVIDER_IDS = ["socialcrawl-tiktok", "socialcrawl-instagram", "postpeer-x", "apify-instagram", "apify-tiktok"] as const;
+export const PAID_PROVIDERS: IntelProvider[] = [rapidStats, socialcrawlTiktok, socialcrawlInstagram, postpeerX, apifyInstagram, apifyTiktok];
+export const PAID_PROVIDER_IDS = ["rapidapi-stats", "socialcrawl-tiktok", "socialcrawl-instagram", "postpeer-x", "apify-instagram", "apify-tiktok"] as const;
 
 /**
  * Paid, opt-in sources that could fill in what the free source couldn't. Offered to the user — never run without an
  * explicit per-request confirmation.
  */
 export function paidOptionsFor(u: ParsedSocialUrl, outcome: IntelOutcome): PaidOption[] {
-  if (outcome.status === "ok" || outcome.status === "not_found" || outcome.status === "private") return [];
+  if (outcome.status === "not_found" || outcome.status === "private") return [];
   const who = u.handle ?? u.externalId;
+  // Account statistics + audience demographics are never available from free sources: always offer them for profiles.
+  const rapid: PaidOption[] =
+    u.kind === "profile"
+      ? [{ provider: "rapidapi-stats", requires: "rapidapi", label: "Instagram Statistics API", estimatedRequests: 1, note: `Followers, engagement rate, quality score, fake followers and audience demographics for @${who}` }]
+      : u.platform === "instagram"
+        ? [{ provider: "rapidapi-stats", requires: "rapidapi", label: "Instagram Statistics API", estimatedRequests: 1, note: "Live likes, comments and views for this post" }]
+        : [];
+  if (outcome.status === "ok") return rapid;
+  return [...rapid, ...paidOptionsForFallbacks(u, who)];
+}
+
+function paidOptionsForFallbacks(u: ParsedSocialUrl, who: string): PaidOption[] {
   if (u.platform === "tiktok") {
     return u.kind === "profile"
       ? [
