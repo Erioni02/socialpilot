@@ -10,6 +10,30 @@ export const BYTEPLUS_BASE = "https://ark.ap-southeast.bytepluses.com/api/v3";
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+/** Seedance 1.0 (pro, pro-fast, lite) models: settings go in the prompt as commands (--ratio, --duration …). */
+export const isSeedanceV1 = (model: string) => /^seedance-1-0/i.test(model);
+
+const firstFrame = (opts: VideoGenOptions) => (opts.imageDataUri ? [{ type: "image_url", image_url: { url: opts.imageDataUri }, role: "first_frame" }] : []);
+
+export function seedanceV1Body(opts: VideoGenOptions) {
+  // 1.0 accepts 2–12 s; 1080p for crisp social video. With a first frame, the frame's aspect wins ("adaptive").
+  const duration = Math.max(2, Math.min(12, Math.round(opts.durationSec)));
+  const ratio = opts.imageDataUri ? "adaptive" : opts.aspect;
+  const commands = `--resolution 1080p --ratio ${ratio} --duration ${duration} --camerafixed false --watermark false`;
+  return { model: opts.model, content: [{ type: "text", text: `${opts.prompt.trim()} ${commands}` }, ...firstFrame(opts)] };
+}
+
+export function seedanceV2Body(opts: VideoGenOptions) {
+  return {
+    model: opts.model,
+    content: [{ type: "text", text: opts.prompt }, ...firstFrame(opts)],
+    ratio: opts.aspect,
+    duration: Math.max(4, Math.min(12, Math.round(opts.durationSec))),
+    resolution: "720p",
+    generate_audio: false,
+  };
+}
+
 export function seedanceProvider(apiKey: string, baseUrl = BYTEPLUS_BASE): VideoProvider & { test(): Promise<string> } {
   const base = baseUrl.replace(/\/$/, "");
   const headers = { authorization: `Bearer ${apiKey}`, "content-type": "application/json" };
@@ -27,19 +51,12 @@ export function seedanceProvider(apiKey: string, baseUrl = BYTEPLUS_BASE): Video
       }
     },
     async generate(opts: VideoGenOptions) {
-      const content: Record<string, unknown>[] = [{ type: "text", text: opts.prompt }];
-      if (opts.imageDataUri) content.push({ type: "image_url", image_url: { url: opts.imageDataUri }, role: "first_frame" });
+      const v1 = isSeedanceV1(opts.model);
+      const body = v1 ? seedanceV1Body(opts) : seedanceV2Body(opts);
       const task = await providerFetch<any>("byteplus", `${base}/contents/generations/tasks`, {
         method: "POST",
         headers,
-        body: JSON.stringify({
-          model: opts.model,
-          content,
-          ratio: opts.aspect,
-          duration: Math.max(4, Math.min(12, Math.round(opts.durationSec))),
-          resolution: "720p",
-          generate_audio: false,
-        }),
+        body: JSON.stringify(body),
         timeoutMs: 60000,
       });
       if (!task?.id) throw new ProviderError("byteplus", "No task id returned");

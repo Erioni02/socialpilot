@@ -48,7 +48,7 @@ Token based. Create an access token at vercel.com/account/tokens and enter the p
 | Provider | Used for | Key |
 |---|---|---|
 | **NVIDIA API Catalog** (recommended main AI) | Agents with tool calling (default `moonshotai/kimi-k2.6`), thinking/planning (`nvidia/nemotron-3-ultra-550b-a55b`), vision for images and sampled video frames (`nvidia/nemotron-3.5-super-vl-120b-a12b`, or `nvidia/cosmos-reason2-8b` for video), fast triage (`z-ai/glm-5.3-flash`). Each role is configurable per project. | `NVIDIA_API_KEY` or Settings |
-| **ByteDance (BytePlus ModelArk)** (main image and video AI) | Image generation and edits with **Seedream** (default `seedream-5-0-260128`, Pro for best text rendering) and video with **Seedance** (text-to-video, first-frame image-to-video). One API key covers both. | `BYTEPLUS_API_KEY` (+ optional `BYTEPLUS_BASE_URL`) |
+| **ByteDance (BytePlus ModelArk)** (main image and video AI) | Image generation and edits with **Seedream 4.0** (`seedream-4-0-250828`, default; 5.0 Lite/Pro selectable) and video with **Seedance 1.0 Pro Fast** (`seedance-1-0-pro-fast-251015`, default: 1080p, 2–12 s, text-to-video or from a first frame; 1.0 Pro and 2.0 selectable). One API key covers both. | `BYTEPLUS_API_KEY` (+ optional `BYTEPLUS_BASE_URL`) |
 | Anthropic | Agents (tool use), text, vision. Default model `claude-opus-5-5`; server-side refusal fallback enabled | `ANTHROPIC_API_KEY` or Settings |
 | OpenAI | Agents (tool use), text, `gpt-image-1` generation and edits, Whisper subtitles | `OPENAI_API_KEY` |
 | Google Gemini | Text and vision (not used for agents) | `GEMINI_API_KEY` |

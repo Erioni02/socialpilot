@@ -42,22 +42,22 @@ describe("ByteDance Seedream (BytePlus ModelArk)", () => {
   it("generates without a watermark at a Seedream-sized resolution and decodes base64", async () => {
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
     const calls = mockFetch(() => json({ id: "r1", data: [{ b64_json: png.toString("base64") }] }));
-    const out = await seedreamProvider("ark-key").generate({ model: "seedream-5-0-260128", prompt: "a cat", size: "1024x1536" });
+    const out = await seedreamProvider("ark-key").generate({ model: "seedream-4-0-250828", prompt: "a cat", size: "1024x1536" });
     expect(calls[0].url).toBe("https://ark.ap-southeast.bytepluses.com/api/v3/images/generations");
     const body = JSON.parse(String(calls[0].init.body));
-    expect(body).toMatchObject({ model: "seedream-5-0-260128", size: "1664x2496", watermark: false, response_format: "b64_json" });
+    expect(body).toMatchObject({ model: "seedream-4-0-250828", size: "1664x2496", watermark: false, response_format: "b64_json" });
     expect(out[0].data.equals(png)).toBe(true);
     expect(out[0].mimeType).toBe("image/png");
   });
   it("sends the source image for edits", async () => {
     const jpg = Buffer.from([0xff, 0xd8, 0xff, 1]);
     const calls = mockFetch(() => json({ data: [{ b64_json: jpg.toString("base64") }] }));
-    await seedreamProvider("k").edit!({ model: "seedream-5-0-260128", prompt: "make it blue", image: { data: jpg, mimeType: "image/jpeg" } });
+    await seedreamProvider("k").edit!({ model: "seedream-4-0-250828", prompt: "make it blue", image: { data: jpg, mimeType: "image/jpeg" } });
     expect(JSON.parse(String(calls[0].init.body)).image).toMatch(/^data:image\/jpeg;base64,/);
   });
   it("surfaces API errors", async () => {
     mockFetch(() => json({ error: { code: "AuthenticationError", message: "The API key is invalid" } }, 401));
-    await expect(seedreamProvider("bad").generate({ model: "seedream-5-0-260128", prompt: "x" })).rejects.toThrow();
+    await expect(seedreamProvider("bad").generate({ model: "seedream-4-0-250828", prompt: "x" })).rejects.toThrow();
   });
 });
 
@@ -82,6 +82,17 @@ describe("ByteDance Seedance (BytePlus ModelArk)", () => {
     expect(create.content[1]).toMatchObject({ type: "image_url", role: "first_frame" });
     expect(out.mimeType).toBe("video/mp4");
     expect(out.data.length).toBe(8);
+  });
+  it("sends Seedance 1.0 settings as prompt commands (1080p, no watermark)", async () => {
+    const { seedanceV1Body, isSeedanceV1 } = await import("../src/seedance");
+    expect(isSeedanceV1("seedance-1-0-pro-fast-251015")).toBe(true);
+    expect(isSeedanceV1("dreamina-seedance-2-0-fast-260128")).toBe(false);
+    const b = seedanceV1Body({ model: "seedance-1-0-pro-fast-251015", prompt: "a product shot ", aspect: "9:16", durationSec: 5 });
+    expect(b.content[0]).toEqual({ type: "text", text: "a product shot --resolution 1080p --ratio 9:16 --duration 5 --camerafixed false --watermark false" });
+    expect((b as any).ratio).toBeUndefined();
+    const withFrame = seedanceV1Body({ model: "seedance-1-0-pro-fast-251015", prompt: "p", aspect: "16:9", durationSec: 30, imageDataUri: "data:image/png;base64,AAAA" });
+    expect((withFrame.content[0] as any).text).toContain("--ratio adaptive --duration 12");
+    expect(withFrame.content[1]).toMatchObject({ type: "image_url", role: "first_frame" });
   });
   it("reports failed tasks", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true, advanceTimeDelta: 50 });

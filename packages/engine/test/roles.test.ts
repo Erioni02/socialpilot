@@ -27,11 +27,11 @@ describe("model roles", () => {
     const u = await user();
     await saveCredential(u.id, "byteplus", { apiKey: "ark-key" });
     const img = await resolveImageAI(u.id, null);
-    expect([img.providerId, img.model]).toEqual(["byteplus", "seedream-5-0-260128"]);
+    expect([img.providerId, img.model]).toEqual(["byteplus", "seedream-4-0-250828"]);
     const edit = await resolveImageAI(u.id, null, undefined, "edit");
     expect(edit.providerId).toBe("byteplus");
     await expect(resolveImageAI(u.id, null, undefined, "remove_background")).rejects.toThrow(/Replicate or Stability/);
     const vid = await resolveVideoAI(u.id, null);
-    expect([vid.providerId, vid.model]).toEqual(["byteplus", "dreamina-seedance-2-0-fast-260128"]);
+    expect([vid.providerId, vid.model]).toEqual(["byteplus", "seedance-1-0-pro-fast-251015"]);
   });
 });

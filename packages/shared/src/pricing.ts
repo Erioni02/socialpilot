@@ -33,6 +33,8 @@ export const UNIT_PRICES: Record<string, number> = {
   "seedream-5-0-260128": 0.035, // estimate per image
   "seedream-5-0-pro-260628": 0.045,
   "seedream-4-0-250828": 0.03,
+  "seedance-1-0-pro-fast-251015": 0.15, // estimate per 5s 1080p clip
+  "seedance-1-0-pro-250528": 0.6,
   "dreamina-seedance-2-0-fast-260128": 0.4, // estimate per 5s 720p clip
   "dreamina-seedance-2-0-260128": 0.8,
 };
