@@ -84,10 +84,13 @@ Token based. Create an access token at vercel.com/account/tokens and enter the p
 | Anthropic | Agents (tool use), text, vision. Default model `claude-opus-5-5`; server-side refusal fallback enabled | `ANTHROPIC_API_KEY` or Settings |
 | OpenAI | Agents (tool use), text, `gpt-image-1` generation and edits, Whisper subtitles | `OPENAI_API_KEY` |
 | Google Gemini | Text and vision (not used for agents) | `GEMINI_API_KEY` |
+| **Ollama** (local or Ollama Cloud) | Free local models: agents with tool calling (e.g. `qwen3`, `llama3.2`), thinking (`gpt-oss`, `deepseek-r1`), vision (`gemma3`, `qwen2.5vl`). With no model chosen, the first installed model is used. | none for local (`OLLAMA_BASE_URL` optional); `OLLAMA_API_KEY` for Ollama Cloud |
 | Replicate | FLUX images, FLUX Kontext edits, background removal, video (MiniMax, Kling) | `REPLICATE_API_TOKEN` |
 | Stability AI | Image generation, background removal | `STABILITY_API_KEY` |
 | NewsAPI / Product Hunt | Extra Discover sources | Settings → Data sources |
 | PageSpeed Insights | Lighthouse scores in audits (works keyless at low quota) | optional |
+
+**Ollama:** install it from ollama.com/download, pull a model (`ollama pull llama3.2`, or `qwen3` for agents), then click **Set up** on the Ollama row in Settings → AI providers. Leave the key empty for a local server (default `http://localhost:11434`); for Ollama Cloud use `https://ollama.com` and an API key from ollama.com/settings/keys. Local URLs follow `ALLOW_LOCAL_AI_ENDPOINTS` (on by default outside production). Ollama is used after the other built-in text providers unless a project or role picks it explicitly.
 
 **Custom providers:** in Settings → AI providers → **Custom providers → Add provider** you can add any OpenAI-compatible API: OpenRouter, Groq, Together, DeepSeek, Mistral, xAI, Fireworks, self-hosted vLLM, Ollama or LM Studio (presets included). For each one you set:
 
@@ -105,6 +108,7 @@ It then appears in every model-role picker. Remote URLs must use HTTPS. Localhos
 | Anthropic | low → max | Claude `effort` (adaptive thinking) |
 | OpenAI | minimal → high | `reasoning_effort` (reasoning models only) |
 | Gemini | off, low, medium, high | `thinkingConfig.thinkingBudget` (0 / 1k / 8k / 24k) |
+| Ollama | off, on, low, medium, high, max | `reasoning_effort` (`none` for off) |
 | NVIDIA and custom | off, on, low, medium, high | `chat_template_kwargs.thinking` (on/off) or `reasoning_effort` (low/medium/high) |
 
 "Provider default" sends nothing. Choose only levels the selected model supports; otherwise the provider returns an error, which the app shows.

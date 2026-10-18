@@ -29,12 +29,18 @@ export interface OpenAICompatibleOptions {
   /** OpenAI uses max_completion_tokens; most other OpenAI-compatible APIs use max_tokens. */
   tokenParam?: "max_completion_tokens" | "max_tokens";
   /** "openai": reasoning_effort only. "compatible": reasoning_effort + chat_template_kwargs thinking switch. */
-  reasoningStyle?: "openai" | "compatible";
+  reasoningStyle?: "openai" | "compatible" | "ollama";
 }
 
 /** Extra request fields for the chosen reasoning level (nothing for "default"). */
-export function reasoningFields(level: string | undefined, style: "openai" | "compatible"): Record<string, unknown> {
+export function reasoningFields(level: string | undefined, style: "openai" | "compatible" | "ollama"): Record<string, unknown> {
   if (!level || level === "default") return {};
+  if (style === "ollama") {
+    // Ollama maps efforts per model; "none" disables thinking, any recognized effort enables it on boolean models.
+    if (level === "off") return { reasoning_effort: "none" };
+    if (level === "on") return { reasoning_effort: "medium" };
+    return ["low", "medium", "high", "max"].includes(level) ? { reasoning_effort: level } : {};
+  }
   if (style === "openai") return ["minimal", "low", "medium", "high"].includes(level) ? { reasoning_effort: level } : {};
   if (["low", "medium", "high"].includes(level)) return { reasoning_effort: level };
   if (level === "off" || level === "on") {

@@ -178,6 +178,8 @@ export interface AiProviderCatalogEntry {
   name: string;
   capabilities: ("text" | "vision" | "tools" | "image" | "image_edit" | "remove_background" | "video" | "transcription")[];
   envVar: string;
+  /** True when the provider works without an API key (e.g. a local Ollama server). */
+  keyOptional?: boolean;
   /** Extra non-secret fields stored with the key (e.g. Cloudflare account ID, BytePlus region URL). */
   extraFields?: { key: "accountId" | "baseUrl"; label: string; envVar: string; optional?: boolean; placeholder?: string }[];
   docsUrl: string;
@@ -208,6 +210,25 @@ export const AI_PROVIDER_CATALOG: Record<AiProviderId, AiProviderCatalogEntry> =
       { id: "meta/llama-3.2-90b-vision-instruct", kind: "text", label: "Llama 3.2 90B Vision", roles: ["vision"] },
       { id: "z-ai/glm-5.3-flash", kind: "text", label: "GLM 5.3 Flash — fast/cheap", roles: ["fast"] },
       { id: "openai/gpt-oss-20b", kind: "text", label: "gpt-oss 20B — fast", roles: ["fast"] },
+    ],
+  },
+  ollama: {
+    id: "ollama",
+    name: "Ollama (local or Ollama Cloud)",
+    capabilities: ["text", "vision", "tools"],
+    envVar: "OLLAMA_API_KEY",
+    keyOptional: true,
+    extraFields: [{ key: "baseUrl", label: "Server URL", envVar: "OLLAMA_BASE_URL", optional: true, placeholder: "http://localhost:11434 (or https://ollama.com for Ollama Cloud)" }],
+    docsUrl: "https://docs.ollama.com/api/openai-compatibility",
+    keyUrl: "https://ollama.com/download",
+    defaultModels: {},
+    models: [
+      { id: "llama3.2", kind: "text", label: "Llama 3.2 (small, fast)", roles: ["text", "fast"] },
+      { id: "qwen3", kind: "text", label: "Qwen3 (tools + thinking)", roles: ["text", "reasoning", "fast"] },
+      { id: "gpt-oss", kind: "text", label: "gpt-oss (reasoning effort)", roles: ["text", "reasoning"] },
+      { id: "deepseek-r1", kind: "text", label: "DeepSeek-R1 (reasoning)", roles: ["reasoning"] },
+      { id: "gemma3", kind: "text", label: "Gemma 3 (vision)", roles: ["vision", "text"] },
+      { id: "qwen2.5vl", kind: "text", label: "Qwen2.5-VL (vision)", roles: ["vision"] },
     ],
   },
   cloudflare: {

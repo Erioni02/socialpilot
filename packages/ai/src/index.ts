@@ -7,10 +7,12 @@ import { stabilityProvider } from "./stability";
 import { nvidiaProvider, listNvidiaModels } from "./nvidia";
 import { cloudflareProvider } from "./cloudflare";
 import { seedanceProvider } from "./seedance";
+import { listOllamaModels, ollamaProvider, ollamaRoot, OLLAMA_DEFAULT_URL } from "./ollama";
 import type { CompleteOptions, ImageProvider, TextProvider, TranscriptionProvider, Usage, VideoProvider } from "./types";
 
 export * from "./types";
-export { anthropicProvider, openaiProvider, geminiProvider, replicateProvider, replicateVideoProvider, stabilityProvider, nvidiaProvider, listNvidiaModels, cloudflareProvider, seedanceProvider };
+export { anthropicProvider, openaiProvider, geminiProvider, replicateProvider, replicateVideoProvider, stabilityProvider, nvidiaProvider, listNvidiaModels, cloudflareProvider, seedanceProvider, ollamaProvider, listOllamaModels, ollamaRoot, OLLAMA_DEFAULT_URL };
+export type { OllamaModel } from "./ollama";
 export { stripThinking } from "./openai";
 
 /** Credential bundle: most providers need only apiKey; Cloudflare also needs accountId, BytePlus may set a regional baseUrl. */
@@ -22,10 +24,12 @@ export interface ProviderCredentials {
 const cred = (c: string | ProviderCredentials): ProviderCredentials => (typeof c === "string" ? { apiKey: c } : c);
 
 export function textProvider(provider: string, c: string | ProviderCredentials): TextProvider {
-  const { apiKey } = cred(c);
+  const { apiKey, baseUrl } = cred(c);
   switch (provider) {
     case "nvidia":
       return nvidiaProvider(apiKey);
+    case "ollama":
+      return ollamaProvider(baseUrl, apiKey);
     case "anthropic":
       return anthropicProvider(apiKey);
     case "openai":
@@ -72,6 +76,8 @@ export async function testProvider(provider: string, c: string | ProviderCredent
       return cloudflareProvider(apiKey, accountId ?? "").test();
     case "byteplus":
       return seedanceProvider(apiKey, baseUrl || undefined).test();
+    case "ollama":
+      return ollamaProvider(baseUrl, apiKey).test();
     case "nvidia":
     case "anthropic":
     case "openai":

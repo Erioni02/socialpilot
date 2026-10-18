@@ -38,6 +38,7 @@ export function reasoningOptions(provider: string): ReasoningLevel[] {
   if (provider === "openai") return ["default", "minimal", "low", "medium", "high"];
   if (provider === "gemini") return ["default", "off", "low", "medium", "high"];
   if (provider === "nvidia" || provider.startsWith("custom:")) return ["default", "off", "on", "low", "medium", "high"];
+  if (provider === "ollama") return ["default", "off", "on", "low", "medium", "high", "max"];
   return ["default"];
 }
 
@@ -46,5 +47,6 @@ export const REASONING_HELP: Record<string, string> = {
   openai: "Sets reasoning_effort. Only reasoning models (o-series, GPT-5) accept it — non-reasoning models will reject anything but “Provider default”.",
   gemini: "Sets the thinking budget (Off = 0 tokens; Low ≈ 1k, Medium ≈ 8k, High ≈ 24k).",
   nvidia: "Low/Medium/High send reasoning_effort (e.g. gpt-oss). On/Off toggle thinking for models with a thinking switch (e.g. Qwen3, Kimi, DeepSeek, GLM). Use only what the chosen model supports.",
+  ollama: "Sends Ollama's reasoning_effort: Off = \"none\" (no thinking), On = default thinking, Low/Medium/High/Max for models with effort levels (e.g. gpt-oss). Models without thinking ignore it.",
   custom: "Low/Medium/High send reasoning_effort. On/Off send chat_template_kwargs {thinking, enable_thinking}. Use only what the chosen model supports.",
 };

@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cloudflareProvider, nvidiaProvider, seedanceProvider, stripThinking } from "../src";
+import { cloudflareProvider, listOllamaModels, nvidiaProvider, ollamaProvider, ollamaRoot, seedanceProvider, stripThinking } from "../src";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -110,5 +110,41 @@ describe("reasoning levels", () => {
     const { geminiProvider } = await import("../src");
     await geminiProvider("g").complete({ model: "gemini-2.5-flash", prompt: "hi", reasoning: "off" });
     expect(JSON.parse(String(calls[1].init.body)).generationConfig.thinkingConfig).toEqual({ thinkingBudget: 0 });
+  });
+});
+
+describe("Ollama", () => {
+  it("normalizes the server URL", () => {
+    expect(ollamaRoot()).toBe("http://localhost:11434");
+    expect(ollamaRoot("http://box:11434/v1/")).toBe("http://box:11434");
+    expect(ollamaRoot("https://ollama.com/api")).toBe("https://ollama.com");
+  });
+
+  it("lists installed models and flags vision models", async () => {
+    const calls = mockFetch(() => json({ models: [{ name: "llama3.2:latest", size: 2e9, details: { family: "llama" } }, { name: "gemma3:4b", details: { family: "gemma3" } }] }));
+    const models = await listOllamaModels(undefined, "ok-key");
+    expect(calls[0].url).toBe("http://localhost:11434/api/tags");
+    expect((calls[0].init.headers as Record<string, string>).authorization).toBe("Bearer ok-key");
+    expect(models.map((m) => [m.name, m.vision])).toEqual([
+      ["llama3.2:latest", false],
+      ["gemma3:4b", true],
+    ]);
+  });
+
+  it("explains an unreachable server", async () => {
+    vi.stubGlobal("fetch", async () => {
+      throw new TypeError("fetch failed");
+    });
+    await expect(listOllamaModels()).rejects.toThrow(/ollama serve/);
+  });
+
+  it("chats through /v1 without a key and maps reasoning off to none", async () => {
+    const calls = mockFetch(() => json({ model: "qwen3", choices: [{ finish_reason: "stop", message: { content: "<think>x</think>Hello" } }], usage: { prompt_tokens: 3, completion_tokens: 1 } }));
+    const r = await ollamaProvider().complete({ model: "qwen3", prompt: "hi", reasoning: "off" });
+    expect(calls[0].url).toBe("http://localhost:11434/v1/chat/completions");
+    const body = JSON.parse(String(calls[0].init.body));
+    expect(body.reasoning_effort).toBe("none");
+    expect(body.max_tokens).toBeDefined();
+    expect(r.text).toBe("Hello");
   });
 });

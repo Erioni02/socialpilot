@@ -32,7 +32,7 @@ export function useProviders() {
  * One row per API-key provider (AI or data): status, masked hint, add/replace, test and delete.
  * Secret values are only ever sent, never displayed.
  */
-export function ProviderKeyRow({ id, name, description, docsUrl, keyUrl, envVar, status, capabilities, extraFields = [], allowDelete = true, modelSettings }: { id: string; name: string; description?: React.ReactNode; docsUrl?: string; keyUrl?: string; envVar?: string; status?: ProviderStatus; capabilities?: string[]; extraFields?: ExtraField[]; allowDelete?: boolean; modelSettings?: { models: any[]; defaults: Record<string, string>; settings?: ProviderSettings } }) {
+export function ProviderKeyRow({ id, name, description, docsUrl, keyUrl, envVar, status, capabilities, extraFields = [], allowDelete = true, modelSettings, keyOptional = false }: { id: string; name: string; description?: React.ReactNode; docsUrl?: string; keyUrl?: string; envVar?: string; status?: ProviderStatus; capabilities?: string[]; extraFields?: ExtraField[]; allowDelete?: boolean; keyOptional?: boolean; modelSettings?: { models: any[]; defaults: Record<string, string>; settings?: ProviderSettings } }) {
   const [showModels, setShowModels] = React.useState(false);
   const qc = useQueryClient();
   const [editing, setEditing] = React.useState(false);
@@ -40,6 +40,7 @@ export function ProviderKeyRow({ id, name, description, docsUrl, keyUrl, envVar,
   const [extra, setExtra] = React.useState<Record<string, string>>({});
   const extraValue = (k: "accountId" | "baseUrl") => extra[k] ?? status?.extra?.[k] ?? "";
   const extraValid = extraFields.every((f) => f.optional || extraValue(f.key).trim().length > 0);
+  const keyValid = keyOptional ? key.trim().length === 0 || key.trim().length >= 8 : key.trim().length >= 8;
   const [testResult, setTestResult] = React.useState<{ ok: boolean; message: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = React.useState(false);
   const refresh = () => {
@@ -49,7 +50,7 @@ export function ProviderKeyRow({ id, name, description, docsUrl, keyUrl, envVar,
   };
   const save = useMutation({
     mutationFn: () => {
-      const body: Record<string, string> = { apiKey: key.trim() };
+      const body: Record<string, string> = key.trim() ? { apiKey: key.trim() } : {};
       for (const f of extraFields) {
         const v = extraValue(f.key).trim();
         if (v) body[f.key] = v;
@@ -59,7 +60,7 @@ export function ProviderKeyRow({ id, name, description, docsUrl, keyUrl, envVar,
     onSuccess: async () => {
       setKey("");
       setEditing(false);
-      toast.success(`${name} key saved`);
+      toast.success(keyOptional && !key.trim() ? `${name} enabled` : `${name} key saved`);
       refresh();
       test.mutate();
     },
@@ -103,7 +104,7 @@ export function ProviderKeyRow({ id, name, description, docsUrl, keyUrl, envVar,
                 </Tooltip>
               ) : (
                 <Badge tone="green" dot>
-                  Key saved
+                  {keyOptional && !status?.hint ? "Enabled" : "Key saved"}
                 </Badge>
               )
             ) : (
@@ -112,6 +113,7 @@ export function ProviderKeyRow({ id, name, description, docsUrl, keyUrl, envVar,
             {configured && status?.status && status.status !== "ok" && <StatusBadge status={status.status} />}
             {status?.hint && <span className="font-mono text-[11.5px] text-muted">{status.hint}</span>}
             {status?.extra?.accountId && <span className="font-mono text-[11.5px] text-muted">account {status.extra.accountId.slice(0, 6)}…</span>}
+            {keyOptional && configured && status?.extra?.baseUrl && <span className="font-mono text-[11.5px] text-muted">{status.extra.baseUrl}</span>}
           </div>
           {description && <p className="text-[12px] text-muted mt-0.5">{description}</p>}
           {capabilities && capabilities.length > 0 && (
@@ -134,7 +136,7 @@ export function ProviderKeyRow({ id, name, description, docsUrl, keyUrl, envVar,
           {keyUrl && !configured && (
             <Button asChild size="sm" variant="ghost">
               <a href={keyUrl} target="_blank" rel="noreferrer">
-                Get a key <ArrowSquareOut size={12} />
+                {keyOptional ? "Download" : "Get a key"} <ArrowSquareOut size={12} />
               </a>
             </Button>
           )}
@@ -156,7 +158,7 @@ export function ProviderKeyRow({ id, name, description, docsUrl, keyUrl, envVar,
             </Button>
           )}
           <Button size="sm" variant={configured ? "secondary" : "primary"} onClick={() => setEditing((v) => !v)}>
-            <Key size={12} weight="bold" /> {configured ? (status?.source === "user" ? "Replace" : "Override") : "Add key"}
+            <Key size={12} weight="bold" /> {configured ? (keyOptional ? "Edit" : status?.source === "user" ? "Replace" : "Override") : keyOptional ? "Set up" : "Add key"}
           </Button>
           {allowDelete && status?.source === "user" && (
             <Button size="icon-sm" variant="danger-ghost" onClick={() => setConfirmDelete(true)} aria-label={`Remove ${name} key`}>
@@ -170,7 +172,7 @@ export function ProviderKeyRow({ id, name, description, docsUrl, keyUrl, envVar,
           className="mt-3 flex flex-col sm:flex-row gap-2"
           onSubmit={(e) => {
             e.preventDefault();
-            if (key.trim().length >= 8 && extraValid) save.mutate();
+            if (keyValid && extraValid) save.mutate();
           }}
         >
           {extraFields.map((f) => (
@@ -183,9 +185,9 @@ export function ProviderKeyRow({ id, name, description, docsUrl, keyUrl, envVar,
               className="font-mono sm:max-w-[240px]"
             />
           ))}
-          <Input type="password" autoComplete="off" autoFocus value={key} onChange={(e) => setKey(e.target.value)} placeholder={`Paste your ${name} API key`} className="font-mono" />
+          <Input type="password" autoComplete="off" autoFocus value={key} onChange={(e) => setKey(e.target.value)} placeholder={keyOptional ? "API key (only for Ollama Cloud — leave empty for local)" : `Paste your ${name} API key`} className="font-mono" />
           <div className="flex gap-2">
-            <Button type="submit" variant="primary" loading={save.isPending} disabled={key.trim().length < 8 || !extraValid}>
+            <Button type="submit" variant="primary" loading={save.isPending} disabled={!keyValid || !extraValid}>
               Save & test
             </Button>
             <Button type="button" variant="ghost" onClick={() => setEditing(false)}>
@@ -229,7 +231,7 @@ export function AiProviderKeys({ only }: { only?: string[] }) {
     <div className="rounded-xl border border-line bg-surface divide-y divide-line">
       {ids.map((id) => {
         const c = meta.aiProviders[id];
-        return <ProviderKeyRow key={id} id={id} name={c.name} docsUrl={c.docsUrl} keyUrl={c.keyUrl} envVar={c.envVar} capabilities={c.capabilities} extraFields={c.extraFields} status={data?.providers.find((x) => x.provider === id)} modelSettings={{ models: c.models, defaults: c.defaultModels, settings: data?.settings?.[id] }} />;
+        return <ProviderKeyRow key={id} id={id} name={c.name} docsUrl={c.docsUrl} keyUrl={c.keyUrl} envVar={c.envVar} capabilities={c.capabilities} extraFields={c.extraFields} keyOptional={!!(c as { keyOptional?: boolean }).keyOptional} status={data?.providers.find((x) => x.provider === id)} modelSettings={{ models: c.models, defaults: c.defaultModels, settings: data?.settings?.[id] }} />;
       })}
     </div>
     {!only && <CustomProviders />}

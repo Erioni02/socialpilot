@@ -48,8 +48,8 @@ export function ProviderModelSettings({
   const live = useQuery({
     queryKey: ["providers", "models", providerId],
     queryFn: () =>
-      api.get<{ models: string[] }>(providerId === "nvidia" ? "/providers/nvidia/models" : `/providers/custom/${encodeURIComponent(providerId)}/models`),
-    enabled: providerId === "nvidia" || providerId.startsWith("custom:"),
+      api.get<{ models: string[] }>(providerId === "nvidia" || providerId === "ollama" ? `/providers/${providerId}/models` : `/providers/custom/${encodeURIComponent(providerId)}/models`),
+    enabled: providerId === "nvidia" || providerId === "ollama" || providerId.startsWith("custom:"),
     staleTime: 3600_000,
     retry: false,
   });
@@ -88,7 +88,7 @@ export function ProviderModelSettings({
               <Input
                 list={listId}
                 value={models_[role] ?? ""}
-                placeholder={defaults[role] ?? (isText ? defaults.text : undefined) ?? "model id"}
+                placeholder={defaults[role] ?? (isText ? defaults.text : undefined) ?? (providerId === "ollama" ? "auto: first installed model" : "model id")}
                 onChange={(e) => setModels((m) => ({ ...m, [role]: e.target.value }))}
                 className="font-mono text-[12px] h-8"
               />
