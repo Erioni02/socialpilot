@@ -1,0 +1,72 @@
+# Production-style stack: PostgreSQL, Redis (BullMQ dispatch), API (+ web UI) and an always-on worker.
+# Usage:
+#   cp .env.example .env   # fill ENCRYPTION_KEY, SESSION_SECRET, URLs and provider credentials
+#   docker compose up -d --build
+# Then open http://localhost:4000 (or your domain behind a TLS reverse proxy).
+services:
+  postgres:
+    image: postgres:17-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: socialpilot
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-socialpilot}
+      POSTGRES_DB: socialpilot
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U socialpilot"]
+      interval: 5s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 20
+
+  api:
+    build: .
+    restart: unless-stopped
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://socialpilot:${POSTGRES_PASSWORD:-socialpilot}@postgres:5432/socialpilot
+      REDIS_URL: redis://redis:6379
+      STORAGE_DIR: /data/storage
+      API_HOST: 0.0.0.0
+    ports:
+      - "4000:4000"
+    volumes:
+      - storage:/data/storage
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:4000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      retries: 10
+
+  worker:
+    build: .
+    restart: unless-stopped
+    command: ["node", "apps/worker/dist/index.js"]
+    env_file: .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://socialpilot:${POSTGRES_PASSWORD:-socialpilot}@postgres:5432/socialpilot
+      REDIS_URL: redis://redis:6379
+      STORAGE_DIR: /data/storage
+    volumes:
+      - storage:/data/storage
+    depends_on:
+      api: { condition: service_healthy }
+
+volumes:
+  pgdata:
+  redisdata:
+  storage:

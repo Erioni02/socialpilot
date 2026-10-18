@@ -1,0 +1,16 @@
+{
+  "name": "@socialpilot/social",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@socialpilot/core": "workspace:*",
+    "@socialpilot/shared": "workspace:*",
+    "zod": "^3.25.76"
+  }
+}

@@ -1,0 +1,36 @@
+{
+  "name": "socialpilot",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "packageManager": "pnpm@9.15.9",
+  "engines": { "node": ">=20.11" },
+  "scripts": {
+    "db:start": "tsx scripts/embedded-postgres.ts",
+    "db:migrate": "pnpm --filter @socialpilot/db migrate:deploy",
+    "db:migrate:dev": "pnpm --filter @socialpilot/db migrate:dev",
+    "db:generate": "pnpm --filter @socialpilot/db generate",
+    "db:seed": "pnpm --filter @socialpilot/db seed",
+    "dev": "concurrently -k -n api,worker,web -c blue,magenta,green \"pnpm --filter @socialpilot/api dev\" \"pnpm --filter @socialpilot/worker dev\" \"pnpm --filter @socialpilot/web dev\"",
+    "dev:api": "pnpm --filter @socialpilot/api dev",
+    "dev:worker": "pnpm --filter @socialpilot/worker dev",
+    "dev:web": "pnpm --filter @socialpilot/web dev",
+    "build": "pnpm -r --filter ./apps/* build",
+    "start": "concurrently -k -n api,worker \"pnpm --filter @socialpilot/api start\" \"pnpm --filter @socialpilot/worker start\"",
+    "typecheck": "pnpm -r typecheck",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "gen:key": "node -e \"console.log(require('crypto').randomBytes(32).toString('base64'))\""
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "concurrently": "^9.1.0",
+    "embedded-postgres": "17.10.0-beta.17",
+    "tsx": "^4.19.2",
+    "typescript": "5.9.3",
+    "vitest": "^3.2.4"
+  },
+  "pnpm": {
+    "onlyBuiltDependencies": ["@prisma/client", "@prisma/engines", "prisma", "esbuild", "sharp", "embedded-postgres", "@embedded-postgres/windows-x64", "@node-rs/argon2", "msgpackr-extract"]
+  }
+}

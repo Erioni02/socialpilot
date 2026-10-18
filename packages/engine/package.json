@@ -1,0 +1,30 @@
+{
+  "name": "@socialpilot/engine",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "dependencies": {
+    "@socialpilot/core": "workspace:*",
+    "@socialpilot/shared": "workspace:*",
+    "@socialpilot/db": "workspace:*",
+    "@socialpilot/ai": "workspace:*",
+    "@socialpilot/social": "workspace:*",
+    "@socialpilot/integrations": "workspace:*",
+    "bullmq": "5.81.5",
+    "ioredis": "5.11.1",
+    "cron-parser": "4.9.0",
+    "diff": "^8.0.2",
+    "sharp": "0.34.5",
+    "pg": "^8.16.3",
+    "zod": "^3.25.76",
+    "cheerio": "^1.1.2"
+  },
+  "devDependencies": {
+    "@types/pg": "^8.15.5"
+  }
+}

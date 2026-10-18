@@ -1,0 +1,691 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ───────────────────────────── Accounts ─────────────────────────────
+
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  passwordHash  String
+  name          String
+  emergencyStop Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  sessions      Session[]
+  projects      Project[]
+  credentials   ProviderCredential[]
+  notifications Notification[]
+  auditLogs     AuditLog[]
+}
+
+model Session {
+  id         String   @id // sha256 of the session token
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  ip         String?
+  userAgent  String?
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+
+  @@index([userId])
+}
+
+/// API keys for AI/data providers and OAuth developer-app credentials, encrypted at rest.
+model ProviderCredential {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider     String // e.g. anthropic, openai, newsapi, oauth:instagram
+  label        String?
+  secretEnc    String // AES-256-GCM encrypted JSON
+  hint         String? // last 4 characters, for display
+  status       String    @default("untested") // untested | ok | error
+  lastTestedAt DateTime?
+  lastError    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([userId, provider])
+}
+
+// ───────────────────────────── Projects ─────────────────────────────
+
+model Project {
+  id             String   @id @default(cuid())
+  ownerId        String
+  owner          User     @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  name           String
+  slug           String
+  websiteUrl     String?
+  logoUrl        String?
+  description    String   @default("")
+  targetAudience String   @default("")
+  industry       String   @default("")
+  products       Json     @default("[]")
+  objectives     Json     @default("[]")
+  brand          Json     @default("{}")
+  competitors    Json     @default("[]")
+  keywords       Json     @default("[]")
+  timezone       String   @default("UTC")
+  aiConfig       Json     @default("{}")
+  policy         Json     @default("{}")
+  paused         Boolean  @default(false)
+  setupStep      Int      @default(1)
+  setupComplete  Boolean  @default(false)
+  profileSource  String? // ai | heuristic | manual
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  integrations  Integration[]
+  campaigns     Campaign[]
+  posts         Post[]
+  assets        Asset[]
+  tasks         Task[]
+  approvals     Approval[]
+  inboxItems    InboxItem[]
+  metrics       MetricSnapshot[]
+  audits        WebsiteAudit[]
+  codeChanges   CodeChange[]
+  opportunities Opportunity[]
+  automations   Automation[]
+  notes         Note[]
+  usages        AiUsage[]
+  queues        RecurringQueue[]
+  briefings     Briefing[]
+  agentConfigs  AgentConfig[]
+
+  @@unique([ownerId, slug])
+  @@index([ownerId])
+}
+
+model Note {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  title     String
+  body      String   @default("")
+  pinned    Boolean  @default(false)
+  author    String   @default("user") // user | agent:<type>
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([projectId])
+}
+
+model AgentConfig {
+  id           String  @id @default(cuid())
+  projectId    String
+  project      Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  agentType    String
+  enabled      Boolean @default(true)
+  instructions String  @default("")
+  model        String?
+
+  @@unique([projectId, agentType])
+}
+
+// ───────────────────────────── Integrations ─────────────────────────────
+
+model Integration {
+  id             String    @id @default(cuid())
+  projectId      String
+  project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  provider       String // instagram | tiktok | x | ga4 | plausible | github | vercel
+  kind           String // social | analytics | repository | deployment
+  status         String    @default("pending") // pending | connected | error | expired | public_only | disconnected
+  accountId      String?
+  accountName    String?
+  accountHandle  String?
+  accountAvatar  String?
+  accountUrl     String?
+  scopes         String[]  @default([])
+  credentialsEnc String?
+  tokenExpiresAt DateTime?
+  config         Json      @default("{}")
+  testResults    Json      @default("{}")
+  lastTestedAt   DateTime?
+  lastSyncAt     DateTime?
+  lastError      String?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  targets     PostTarget[]
+  inboxItems  InboxItem[]
+  metrics     MetricSnapshot[]
+  codeChanges CodeChange[]
+
+  @@index([projectId, provider])
+}
+
+model OAuthState {
+  id           String   @id // random state value
+  userId       String
+  projectId    String
+  provider     String
+  codeVerifier String?
+  redirectTo   String?
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+}
+
+// ───────────────────────────── Content ─────────────────────────────
+
+model Campaign {
+  id             String    @id @default(cuid())
+  projectId      String
+  project        Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name           String
+  slug           String
+  objective      String    @default("")
+  targetAudience String    @default("")
+  startDate      DateTime?
+  endDate        DateTime?
+  platforms      String[]  @default([])
+  pillars        Json      @default("[]")
+  guidelines     String    @default("")
+  budgetUsd      Float?
+  status         String    @default("planning")
+  plan           Json?
+  createdBy      String    @default("user")
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  posts  Post[]
+  assets Asset[]
+
+  @@index([projectId])
+}
+
+model Post {
+  id            String    @id @default(cuid())
+  projectId     String
+  project       Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  campaignId    String?
+  campaign      Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  title         String    @default("")
+  type          String    @default("text")
+  body          String    @default("")
+  platforms     String[]  @default([])
+  variants      Json      @default("{}")
+  hashtags      String[]  @default([])
+  cta           String    @default("")
+  link          String?
+  mediaAssetIds String[]  @default([])
+  notes         String    @default("")
+  status        String    @default("draft")
+  scheduledAt   DateTime?
+  timezone      String    @default("UTC")
+  queueId       String?
+  qualityReport Json?
+  version       Int       @default(1)
+  createdBy     String    @default("user")
+  approvalId    String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  versions PostVersion[]
+  targets  PostTarget[]
+
+  @@index([projectId, status])
+  @@index([projectId, scheduledAt])
+}
+
+model PostVersion {
+  id        String   @id @default(cuid())
+  postId    String
+  post      Post     @relation(fields: [postId], references: [id], onDelete: Cascade)
+  version   Int
+  snapshot  Json
+  createdBy String   @default("user")
+  createdAt DateTime @default(now())
+
+  @@unique([postId, version])
+}
+
+/// One publication of a post on one connected account.
+model PostTarget {
+  id             String       @id @default(cuid())
+  postId         String
+  post           Post         @relation(fields: [postId], references: [id], onDelete: Cascade)
+  integrationId  String?
+  integration    Integration? @relation(fields: [integrationId], references: [id], onDelete: SetNull)
+  platform       String
+  status         String       @default("pending")
+  scheduledAt    DateTime?
+  publishedAt    DateTime?
+  remoteId       String?
+  remoteUrl      String?
+  providerState  Json         @default("{}") // container ids, publish ids, thread ids for idempotent resume
+  attempts       Int          @default(0)
+  lastError      String?
+  idempotencyKey String       @unique
+  metrics        Json?
+  metricsAt      DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([status, scheduledAt])
+}
+
+model RecurringQueue {
+  id        String   @id @default(cuid())
+  projectId String
+  project   Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name      String
+  platforms String[] @default([])
+  slots     Json     @default("[]") // [{ weekday: 0-6, time: "09:30" }]
+  timezone  String   @default("UTC")
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+// ───────────────────────────── Media ─────────────────────────────
+
+model Asset {
+  id               String    @id @default(cuid())
+  projectId        String
+  project          Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  campaignId       String?
+  campaign         Campaign? @relation(fields: [campaignId], references: [id], onDelete: SetNull)
+  folder           String    @default("/")
+  kind             String // image | video | audio | document
+  name             String
+  tags             String[]  @default([])
+  currentVersionId String?
+  source           String    @default("upload") // upload | generated | edited | agent
+  status           String    @default("ready") // ready | processing | failed
+  approvalStatus   String    @default("none") // none | pending | approved | rejected
+  error            String?
+  createdBy        String    @default("user")
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  versions AssetVersion[]
+
+  @@index([projectId, folder])
+}
+
+model AssetVersion {
+  id          String   @id @default(cuid())
+  assetId     String
+  asset       Asset    @relation(fields: [assetId], references: [id], onDelete: Cascade)
+  version     Int
+  storageKey  String
+  mimeType    String
+  sizeBytes   Int
+  width       Int?
+  height      Int?
+  durationSec Float?
+  operation   String // upload | generate | crop | resize | brand | ai_edit | remove_background | variation | trim | subtitles ...
+  params      Json     @default("{}")
+  provider    String?
+  model       String?
+  prompt      String?
+  costUsd     Float    @default(0)
+  createdBy   String   @default("user")
+  createdAt   DateTime @default(now())
+
+  @@unique([assetId, version])
+}
+
+// ───────────────────────────── Agents & tasks ─────────────────────────────
+
+model Task {
+  id              String    @id @default(cuid())
+  projectId       String
+  project         Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  agentType       String    @default("general")
+  title           String
+  instruction     String
+  status          String    @default("queued")
+  plan            Json?
+  result          Json?
+  summary         String?
+  error           String?
+  costUsd         Float     @default(0)
+  model           String?
+  input           Json      @default("{}")
+  parentTaskId    String?
+  automationRunId String?
+  cancelRequested Boolean   @default(false)
+  createdBy       String    @default("user")
+  createdAt       DateTime  @default(now())
+  startedAt       DateTime?
+  finishedAt      DateTime?
+
+  steps TaskStep[]
+
+  @@index([projectId, createdAt])
+}
+
+model TaskStep {
+  id        String   @id @default(cuid())
+  taskId    String
+  task      Task     @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  seq       Int
+  type      String // plan | thinking | tool_call | tool_result | message | error | approval | summary
+  tool      String?
+  input     Json?
+  output    Json?
+  status    String   @default("ok")
+  createdAt DateTime @default(now())
+
+  @@index([taskId, seq])
+}
+
+model Approval {
+  id          String    @id @default(cuid())
+  projectId   String
+  project     Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  taskId      String?
+  type        String // publish | reply | merge | deploy | spend | code_change
+  title       String
+  summary     String    @default("")
+  payload     Json
+  status      String    @default("pending") // pending | approved | rejected | executed | failed | expired
+  requestedBy String    @default("user")
+  decidedBy   String?
+  decidedAt   DateTime?
+  result      Json?
+  createdAt   DateTime  @default(now())
+
+  @@index([projectId, status])
+}
+
+// ───────────────────────────── Inbox ─────────────────────────────
+
+model InboxItem {
+  id             String      @id @default(cuid())
+  projectId      String
+  project        Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  integrationId  String
+  integration    Integration @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  platform       String
+  remoteId       String
+  kind           String // comment | reply | mention
+  parentRemoteId String?
+  postRemoteId   String?
+  postUrl        String?
+  authorName     String?
+  authorHandle   String?
+  text           String
+  url            String?
+  receivedAt     DateTime
+  classification String?
+  classificationMethod String? // ai | rules
+  sentiment      String?
+  priority       Int         @default(0)
+  status         String      @default("new") // new | drafted | pending_approval | replied | ignored | escalated
+  draftReply     String?
+  repliedAt      DateTime?
+  replyRemoteId  String?
+  createdAt      DateTime    @default(now())
+
+  @@unique([integrationId, remoteId])
+  @@index([projectId, status])
+}
+
+// ───────────────────────────── Analytics ─────────────────────────────
+
+model MetricSnapshot {
+  id            String       @id @default(cuid())
+  projectId     String
+  project       Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  integrationId String?
+  integration   Integration? @relation(fields: [integrationId], references: [id], onDelete: SetNull)
+  source        String // instagram | tiktok | x | ga4 | plausible | pagespeed
+  metric        String
+  value         Float
+  dimension     String       @default("")
+  date          DateTime // day the value refers to (UTC midnight) or capture time for gauges
+  capturedAt    DateTime     @default(now())
+
+  @@unique([projectId, source, metric, dimension, date])
+  @@index([projectId, source, metric])
+}
+
+// ───────────────────────────── Website ─────────────────────────────
+
+model WebsiteAudit {
+  id           String    @id @default(cuid())
+  projectId    String
+  project      Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  url          String
+  status       String    @default("queued") // queued | running | completed | failed
+  pagesCrawled Int       @default(0)
+  report       Json?
+  scores       Json?
+  aiAnalysis   Json?
+  error        String?
+  createdAt    DateTime  @default(now())
+  finishedAt   DateTime?
+
+  @@index([projectId, createdAt])
+}
+
+model CodeChange {
+  id            String       @id @default(cuid())
+  projectId     String
+  project       Project      @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  integrationId String?
+  integration   Integration? @relation(fields: [integrationId], references: [id], onDelete: SetNull)
+  taskId        String?
+  title         String
+  description   String       @default("")
+  repo          String
+  baseBranch    String
+  baseSha       String?
+  branch        String
+  status        String       @default("draft") // draft | branch_pushed | pr_open | merged | closed | rejected | failed
+  files         Json // [{ path, before, after, action }]
+  diff          String       @default("")
+  prNumber      Int?
+  prUrl         String?
+  headSha       String?
+  checks        Json?
+  previewUrl    String?
+  error         String?
+  createdBy     String       @default("user")
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  @@index([projectId])
+}
+
+// ───────────────────────────── Discover ─────────────────────────────
+
+model DiscoverSource {
+  id          String    @id @default(cuid())
+  type        String // hn | github | rss | newsapi | producthunt
+  name        String
+  url         String?
+  category    String    @default("tech")
+  enabled     Boolean   @default(true)
+  lastFetchAt DateTime?
+  lastError   String?
+  itemCount   Int       @default(0)
+  createdAt   DateTime  @default(now())
+
+  @@unique([type, name])
+}
+
+model DiscoverItem {
+  id          String   @id @default(cuid())
+  sourceType  String
+  sourceName  String
+  externalId  String
+  title       String
+  url         String
+  summary     String   @default("")
+  author      String?
+  publishedAt DateTime
+  score       Float? // real upstream signal: HN points, GitHub stars, etc.
+  comments    Int?
+  category    String   @default("tech")
+  tags        String[] @default([])
+  raw         Json     @default("{}")
+  fetchedAt   DateTime @default(now())
+
+  @@unique([sourceType, externalId])
+  @@index([publishedAt])
+  @@index([category, publishedAt])
+}
+
+model Opportunity {
+  id             String   @id @default(cuid())
+  projectId      String
+  project        Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  itemIds        String[] @default([])
+  title          String
+  whatHappened   String   @default("")
+  whyItMatters   String   @default("")
+  sources        Json     @default("[]") // [{ title, url, publishedAt, sourceName }]
+  relevance      String   @default("")
+  relevanceScore Float    @default(0)
+  angle          String   @default("")
+  audience       String   @default("")
+  platform       String   @default("")
+  hook           String   @default("")
+  outline        Json     @default("[]")
+  cta            String   @default("")
+  timeliness     String   @default("")
+  confidence     String   @default("")
+  risks          String   @default("")
+  method         String   @default("ai") // ai | heuristic
+  status         String   @default("new") // new | saved | dismissed | used
+  createdAt      DateTime @default(now())
+
+  @@index([projectId, createdAt])
+}
+
+model Briefing {
+  id        String   @id @default(cuid())
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  date      String // YYYY-MM-DD
+  method    String   @default("ai")
+  content   Json
+  createdAt DateTime @default(now())
+
+  @@index([projectId, date])
+}
+
+// ───────────────────────────── Automation ─────────────────────────────
+
+model Automation {
+  id              String    @id @default(cuid())
+  projectId       String
+  project         Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  name            String
+  description     String    @default("")
+  trigger         Json
+  steps           Json
+  active          Boolean   @default(false)
+  allowAutoPublish Boolean  @default(false)
+  lastRunAt       DateTime?
+  nextRunAt       DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  runs AutomationRun[]
+
+  @@index([active, nextRunAt])
+}
+
+model AutomationRun {
+  id           String     @id @default(cuid())
+  automationId String
+  automation   Automation @relation(fields: [automationId], references: [id], onDelete: Cascade)
+  status       String     @default("running") // running | completed | failed | skipped
+  trigger      String     @default("schedule")
+  log          Json       @default("[]")
+  error        String?
+  startedAt    DateTime   @default(now())
+  finishedAt   DateTime?
+
+  @@index([automationId, startedAt])
+}
+
+// ───────────────────────────── Ops ─────────────────────────────
+
+model AiUsage {
+  id           String   @id @default(cuid())
+  userId       String
+  projectId    String?
+  project      Project? @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  taskId       String?
+  provider     String
+  model        String
+  kind         String // text | image | video | transcription | vision
+  inputTokens  Int      @default(0)
+  outputTokens Int      @default(0)
+  units        Float    @default(0)
+  costUsd      Float    @default(0)
+  createdAt    DateTime @default(now())
+
+  @@index([projectId, createdAt])
+  @@index([userId, createdAt])
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  user      User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  projectId String?
+  actor     String // user | agent:<type> | automation:<id> | system
+  action    String
+  target    String?
+  details   Json     @default("{}")
+  ip        String?
+  createdAt DateTime @default(now())
+
+  @@index([projectId, createdAt])
+  @@index([userId, createdAt])
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  projectId String?
+  type      String
+  title     String
+  body      String   @default("")
+  link      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now())
+
+  @@index([userId, read, createdAt])
+}
+
+/// Durable job record. Postgres is the source of truth; BullMQ (when REDIS_URL is set) only dispatches.
+model Job {
+  id          String    @id @default(cuid())
+  queue       String    @default("default")
+  name        String
+  payload     Json      @default("{}")
+  status      String    @default("waiting") // waiting | active | completed | failed | cancelled
+  runAt       DateTime  @default(now())
+  attempts    Int       @default(0)
+  maxAttempts Int       @default(3)
+  lastError   String?
+  result      Json?
+  lockedAt    DateTime?
+  lockedBy    String?
+  dedupeKey   String?   @unique
+  projectId   String?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  finishedAt  DateTime?
+
+  @@index([status, runAt])
+  @@index([projectId, createdAt])
+}
