@@ -392,7 +392,7 @@ export default function Workspace() {
                   </Button>
                 }
               >
-                The image agent can still crop, resize and brand assets; AI edits and generation need an OpenAI, Replicate or Stability key.
+                The image agent can still crop, resize and brand assets; AI edits and generation need an Cloudflare, OpenAI, Replicate or Stability key.
               </SetupCallout>
             )}
             <CommandBar

@@ -97,6 +97,7 @@ export async function proposeProfile(userId: string, project: Project | null, re
         schemaHint:
           '{"description": string, "targetAudience": string, "industry": string, "products": [{"name": string, "description": string}], "objectives": string[], "keywords": string[], "competitors": string[], "brand": {"voice": string, "tone": string[], "guidelines": string, "hashtags": string[], "doNotSay": string[]}, "evidence": string[], "uncertainties": string[]}',
         schema: profileSchema,
+        role: "reasoning",
         maxTokens: 4000,
       },
       project,
@@ -163,8 +164,8 @@ export async function projectReadiness(userId: string, project: Project) {
   const integrations = await prisma.integration.findMany({ where: { projectId: project.id, status: { not: "disconnected" } } });
   const has = (p: string) => integrations.some((i) => i.provider === p && i.status === "connected");
   const textAI = await hasTextAI(userId, project);
-  const imageAI = !!((await getApiKey(userId, "openai")) || (await getApiKey(userId, "replicate")) || (await getApiKey(userId, "stability")));
-  const videoAI = !!(await getApiKey(userId, "replicate"));
+  const imageAI = !!((await getApiKey(userId, "cloudflare")) || (await getApiKey(userId, "openai")) || (await getApiKey(userId, "replicate")) || (await getApiKey(userId, "stability")));
+  const videoAI = !!((await getApiKey(userId, "byteplus")) || (await getApiKey(userId, "replicate")));
   return {
     website: !!project.websiteUrl,
     social: { instagram: has("instagram"), tiktok: has("tiktok"), x: has("x") },

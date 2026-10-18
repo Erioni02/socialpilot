@@ -624,7 +624,7 @@ function AiStep({ project, onBack, onNext }: { project: any; onBack: () => void;
         <p className="text-[12.5px] text-muted mb-3">
           Keys are encrypted at rest and never shown again. A text provider (Anthropic, OpenAI or Gemini) powers agents, profiles and drafts; image and video providers power media generation.
         </p>
-        <AiProviderKeys only={["anthropic", "openai", "gemini", "replicate", "stability"]} />
+        <AiProviderKeys />
       </section>
       <section>
         <SectionTitle>Models for this project</SectionTitle>
@@ -684,7 +684,7 @@ function LaunchStep({ project, readiness, policy, onBack }: { project: any; read
   const items = [
     { ok: readiness.website, label: "Website", detail: readiness.website ? "Audits, uptime and profile context available." : "Add a website URL to enable audits.", fix: { to: `/projects/${id}/settings`, label: "Add website" } },
     { ok: readiness.ai?.text, label: "Text AI", detail: readiness.ai?.text ? "Agents, drafts, campaigns and replies can be generated." : "Agents and drafting need a text provider key.", fix: { to: `/projects/${id}/setup?step=6`, label: "Add key" } },
-    { ok: readiness.ai?.image, label: "Image generation", detail: readiness.ai?.image ? "Generate and edit images." : "Needs an OpenAI, Replicate or Stability key.", fix: { to: `/projects/${id}/setup?step=6`, label: "Add key" } },
+    { ok: readiness.ai?.image, label: "Image generation", detail: readiness.ai?.image ? "Generate and edit images." : "Needs an Cloudflare, OpenAI, Replicate or Stability key.", fix: { to: `/projects/${id}/setup?step=6`, label: "Add key" } },
     { ok: readiness.ai?.video, label: "Video generation", detail: readiness.ai?.video ? "Generate short videos." : "Needs a Replicate key. FFmpeg editing works without it.", fix: { to: `/projects/${id}/setup?step=6`, label: "Add key" } },
     ...socials.map(([pl, ok]) => ({ ok, label: PLATFORM_LABEL[pl] ?? pl, detail: ok ? "Metrics, publishing and inbox (per platform capabilities)." : "Not connected — content can still be drafted and exported.", fix: { to: `/projects/${id}/setup?step=5`, label: "Connect" } })),
     { ok: readiness.analytics, label: "Web analytics", detail: readiness.analytics ? "Sessions, users and conversions are measured." : "Connect GA4 or Plausible to measure traffic.", fix: { to: `/projects/${id}/setup?step=5`, label: "Connect" } },

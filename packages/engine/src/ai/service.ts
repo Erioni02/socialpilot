@@ -12,7 +12,7 @@ import {
 } from "@socialpilot/ai";
 import { AI_PROVIDER_CATALOG, estimateTextCost, estimateUnitCost, normalizePolicy, type AiConfig } from "@socialpilot/shared";
 import type { z } from "zod";
-import { getApiKey } from "../infra/credentials";
+import { getApiKey, getProviderCreds } from "../infra/credentials";
 
 export interface AiCallContext {
   userId: string;
@@ -26,37 +26,62 @@ export class BudgetExceededError extends AppError {
   }
 }
 
-const TEXT_ORDER = ["anthropic", "openai", "gemini"];
-const IMAGE_ORDER = ["openai", "replicate", "stability"];
+const TEXT_ORDER = ["nvidia", "anthropic", "openai", "gemini"];
+const VISION_CAPABLE = ["nvidia", "anthropic", "openai", "gemini"];
+const IMAGE_ORDER = ["cloudflare", "openai", "replicate", "stability"];
+const VIDEO_ORDER = ["byteplus", "replicate"];
+
+/** text = main agent model (tool use); reasoning = planning & analysis; vision = images/video frames; fast = cheap classification. */
+export type TextRole = "text" | "reasoning" | "vision" | "fast";
 
 function aiConfigOf(project?: Pick<Project, "aiConfig"> | null): AiConfig {
   return ((project?.aiConfig as AiConfig | null) ?? {}) as AiConfig;
 }
 
-async function firstConfigured(userId: string, order: string[]): Promise<{ provider: string; key: string } | null> {
+async function firstConfigured(userId: string, order: string[]) {
   for (const p of order) {
-    const key = await getApiKey(userId, p);
-    if (key) return { provider: p, key };
+    const creds = await getProviderCreds(userId, p);
+    if (creds) return { provider: p, creds };
   }
   return null;
 }
 
-export async function resolveTextAI(userId: string, project?: Pick<Project, "aiConfig"> | null, opts: { needsTools?: boolean } = {}) {
+function roleConfig(cfg: AiConfig, role: TextRole): { provider?: string | null; model?: string | null } {
+  if (role === "reasoning") return { provider: cfg.reasoningProvider, model: cfg.reasoningModel };
+  if (role === "vision") return { provider: cfg.visionProvider, model: cfg.visionModel };
+  if (role === "fast") return { provider: cfg.fastProvider, model: cfg.fastModel };
+  return { provider: cfg.textProvider, model: cfg.textModel };
+}
+
+/**
+ * Picks the provider + model for a job. Order: the role's configured provider, then the main provider,
+ * then the first configured one (NVIDIA first). Models default to the provider catalog's per-role default.
+ */
+export async function resolveTextAI(userId: string, project?: Pick<Project, "aiConfig"> | null, opts: { needsTools?: boolean; role?: TextRole } = {}) {
   const cfg = aiConfigOf(project);
-  const order = cfg.textProvider ? [cfg.textProvider, ...TEXT_ORDER.filter((p) => p !== cfg.textProvider)] : TEXT_ORDER;
-  const usable = opts.needsTools ? order.filter((p) => p !== "gemini") : order;
-  const found = await firstConfigured(userId, usable);
+  const role = opts.role ?? "text";
+  const rc = roleConfig(cfg, role);
+  const preferred = [rc.provider, cfg.textProvider].filter((p): p is string => !!p);
+  let order = [...new Set([...preferred, ...TEXT_ORDER])];
+  if (opts.needsTools) order = order.filter((p) => p !== "gemini");
+  if (role === "vision") order = order.filter((p) => VISION_CAPABLE.includes(p));
+  const found = await firstConfigured(userId, order);
   if (!found) {
     throw new SetupRequiredError(
       opts.needsTools
-        ? "Agents need an Anthropic or OpenAI API key. Add one in Settings → AI providers."
-        : "No AI text provider is configured. Add an Anthropic, OpenAI or Gemini API key in Settings → AI providers.",
-      { kind: "ai_provider", link: "/settings/providers" },
+        ? "Agents need an NVIDIA, Anthropic or OpenAI API key. Add one in Settings → AI providers."
+        : "No AI text provider is configured. Add an NVIDIA, Anthropic, OpenAI or Gemini API key in Settings → AI providers.",
+      { kind: "ai_provider", link: "/settings?tab=ai" },
     );
   }
+  const defaults = AI_PROVIDER_CATALOG[found.provider as keyof typeof AI_PROVIDER_CATALOG].defaultModels;
   const model =
-    found.provider === cfg.textProvider && cfg.textModel ? cfg.textModel : AI_PROVIDER_CATALOG[found.provider as keyof typeof AI_PROVIDER_CATALOG].defaultModels.text!;
-  return { providerId: found.provider, model, provider: textProvider(found.provider, found.key) };
+    found.provider === rc.provider && rc.model
+      ? rc.model
+      : found.provider === cfg.textProvider && cfg.textModel && role === "text"
+        ? cfg.textModel
+        : (defaults[role] ?? defaults.text!);
+  return { providerId: found.provider, model, role, provider: textProvider(found.provider, found.creds) };
 }
 
 export async function hasTextAI(userId: string, project?: Pick<Project, "aiConfig"> | null): Promise<boolean> {
@@ -124,8 +149,8 @@ export async function recordUsage(
   if (ctx.taskId) await prisma.task.update({ where: { id: ctx.taskId }, data: { costUsd: { increment: u.costUsd } } });
 }
 
-export async function aiComplete(ctx: AiCallContext, opts: Omit<CompleteOptions, "model"> & { model?: string }, project?: Project | null) {
-  const ai = await resolveTextAI(ctx.userId, project);
+export async function aiComplete(ctx: AiCallContext, opts: Omit<CompleteOptions, "model"> & { model?: string; role?: TextRole }, project?: Project | null) {
+  const ai = await resolveTextAI(ctx.userId, project, { role: opts.role ?? (opts.images?.length ? "vision" : "text") });
   const model = opts.model ?? ai.model;
   await checkBudget(ctx, estimateTextCost(model, 4000, 2000));
   const r = await ai.provider.complete({ ...opts, model });
@@ -135,10 +160,10 @@ export async function aiComplete(ctx: AiCallContext, opts: Omit<CompleteOptions,
 
 export async function aiJson<S extends z.ZodTypeAny>(
   ctx: AiCallContext,
-  opts: Omit<CompleteOptions, "model"> & { model?: string; schema: S; schemaHint: string },
+  opts: Omit<CompleteOptions, "model"> & { model?: string; schema: S; schemaHint: string; role?: TextRole },
   project?: Project | null,
 ): Promise<{ data: z.infer<S>; provider: string; model: string }> {
-  const ai = await resolveTextAI(ctx.userId, project);
+  const ai = await resolveTextAI(ctx.userId, project, { role: opts.role ?? (opts.images?.length ? "vision" : "text") });
   const model = opts.model ?? ai.model;
   await checkBudget(ctx, estimateTextCost(model, 6000, 3000));
   const r = await completeJson(ai.provider as TextProvider, { ...opts, model });
@@ -150,23 +175,25 @@ export async function resolveImageAI(userId: string, project?: Pick<Project, "ai
   const cfg = aiConfigOf(project);
   const preferred = wanted ?? cfg.imageProvider ?? undefined;
   let order = preferred ? [preferred, ...IMAGE_ORDER.filter((p) => p !== preferred)] : IMAGE_ORDER;
-  if (capability === "edit") order = order.filter((p) => p === "openai" || p === "replicate");
+  if (capability === "edit") order = order.filter((p) => ["cloudflare", "openai", "replicate"].includes(p));
   if (capability === "remove_background") order = order.filter((p) => p === "replicate" || p === "stability");
   const found = await firstConfigured(userId, order);
   if (!found) {
-    const needs = capability === "edit" ? "OpenAI or Replicate" : capability === "remove_background" ? "Replicate or Stability AI" : "OpenAI, Replicate or Stability AI";
-    throw new SetupRequiredError(`Image ${capability.replace("_", " ")} needs an ${needs} API key. Add one in Settings → AI providers.`, { kind: "ai_provider", link: "/settings/providers" });
+    const needs = capability === "edit" ? "Cloudflare, OpenAI or Replicate" : capability === "remove_background" ? "Replicate or Stability AI" : "Cloudflare Workers AI, OpenAI, Replicate or Stability AI";
+    throw new SetupRequiredError(`Image ${capability.replace("_", " ")} needs a ${needs} key. Add one in Settings → AI providers.`, { kind: "ai_provider", link: "/settings?tab=ai" });
   }
   const model =
     found.provider === cfg.imageProvider && cfg.imageModel ? cfg.imageModel : AI_PROVIDER_CATALOG[found.provider as keyof typeof AI_PROVIDER_CATALOG].defaultModels.image!;
-  return { providerId: found.provider, model, provider: imageProvider(found.provider, found.key) };
+  return { providerId: found.provider, model, provider: imageProvider(found.provider, found.creds) };
 }
 
 export async function resolveVideoAI(userId: string, project?: Pick<Project, "aiConfig"> | null) {
   const cfg = aiConfigOf(project);
-  const key = await getApiKey(userId, "replicate");
-  if (!key) throw new SetupRequiredError("Video generation needs a Replicate API token. Add one in Settings → AI providers.", { kind: "ai_provider", provider: "replicate", link: "/settings/providers" });
-  return { providerId: "replicate", model: cfg.videoModel ?? AI_PROVIDER_CATALOG.replicate.defaultModels.video!, provider: videoProvider("replicate", key) };
+  const order = cfg.videoProvider ? [cfg.videoProvider, ...VIDEO_ORDER.filter((p) => p !== cfg.videoProvider)] : VIDEO_ORDER;
+  const found = await firstConfigured(userId, order);
+  if (!found) throw new SetupRequiredError("Video generation needs a BytePlus (Seedance) or Replicate key. Add one in Settings → AI providers.", { kind: "ai_provider", link: "/settings?tab=ai" });
+  const model = found.provider === cfg.videoProvider && cfg.videoModel ? cfg.videoModel : AI_PROVIDER_CATALOG[found.provider as keyof typeof AI_PROVIDER_CATALOG].defaultModels.video!;
+  return { providerId: found.provider, model, provider: videoProvider(found.provider, found.creds) };
 }
 
 export async function resolveTranscriptionAI(userId: string) {

@@ -157,7 +157,7 @@ export function ImageEditPanel({
       <Section title="AI editing" icon={<Sparkle size={14} weight="fill" />}>
         {!imageAI ? (
           <SetupCallout title="No image AI key" action={<Button asChild size="sm" variant="secondary"><Link to="/settings">Settings</Link></Button>}>
-            Add an OpenAI, Replicate or Stability key to edit with AI.
+            Add an Cloudflare, OpenAI, Replicate or Stability key to edit with AI.
           </SetupCallout>
         ) : (
           <div className="space-y-3">

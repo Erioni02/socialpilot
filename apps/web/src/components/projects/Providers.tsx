@@ -15,7 +15,10 @@ export type ProviderStatus = {
   status: string | null;
   lastTestedAt: string | null;
   lastError: string | null;
+  extra?: { accountId?: string; baseUrl?: string } | null;
 };
+
+type ExtraField = { key: "accountId" | "baseUrl"; label: string; envVar: string; optional?: boolean; placeholder?: string };
 
 export function useProviders() {
   return useQuery({ queryKey: ["providers"], queryFn: () => api.get<{ providers: ProviderStatus[] }>("/providers") });
@@ -25,10 +28,13 @@ export function useProviders() {
  * One row per API-key provider (AI or data): status, masked hint, add/replace, test and delete.
  * Secret values are only ever sent, never displayed.
  */
-export function ProviderKeyRow({ id, name, description, docsUrl, envVar, status, capabilities, allowDelete = true }: { id: string; name: string; description?: React.ReactNode; docsUrl?: string; envVar?: string; status?: ProviderStatus; capabilities?: string[]; allowDelete?: boolean }) {
+export function ProviderKeyRow({ id, name, description, docsUrl, keyUrl, envVar, status, capabilities, extraFields = [], allowDelete = true }: { id: string; name: string; description?: React.ReactNode; docsUrl?: string; keyUrl?: string; envVar?: string; status?: ProviderStatus; capabilities?: string[]; extraFields?: ExtraField[]; allowDelete?: boolean }) {
   const qc = useQueryClient();
   const [editing, setEditing] = React.useState(false);
   const [key, setKey] = React.useState("");
+  const [extra, setExtra] = React.useState<Record<string, string>>({});
+  const extraValue = (k: "accountId" | "baseUrl") => extra[k] ?? status?.extra?.[k] ?? "";
+  const extraValid = extraFields.every((f) => f.optional || extraValue(f.key).trim().length > 0);
   const [testResult, setTestResult] = React.useState<{ ok: boolean; message: string } | null>(null);
   const [confirmDelete, setConfirmDelete] = React.useState(false);
   const refresh = () => {
@@ -37,7 +43,14 @@ export function ProviderKeyRow({ id, name, description, docsUrl, envVar, status,
     qc.invalidateQueries({ queryKey: ["dashboard"] });
   };
   const save = useMutation({
-    mutationFn: () => api.put(`/providers/${id}`, { apiKey: key.trim() }),
+    mutationFn: () => {
+      const body: Record<string, string> = { apiKey: key.trim() };
+      for (const f of extraFields) {
+        const v = extraValue(f.key).trim();
+        if (v) body[f.key] = v;
+      }
+      return api.put(`/providers/${id}`, body);
+    },
     onSuccess: async () => {
       setKey("");
       setEditing(false);
@@ -93,6 +106,7 @@ export function ProviderKeyRow({ id, name, description, docsUrl, envVar, status,
             )}
             {configured && status?.status && status.status !== "ok" && <StatusBadge status={status.status} />}
             {status?.hint && <span className="font-mono text-[11.5px] text-muted">{status.hint}</span>}
+            {status?.extra?.accountId && <span className="font-mono text-[11.5px] text-muted">account {status.extra.accountId.slice(0, 6)}…</span>}
           </div>
           {description && <p className="text-[12px] text-muted mt-0.5">{description}</p>}
           {capabilities && capabilities.length > 0 && (
@@ -112,6 +126,13 @@ export function ProviderKeyRow({ id, name, description, docsUrl, envVar, status,
           )}
         </div>
         <div className="flex items-center gap-1.5 shrink-0">
+          {keyUrl && !configured && (
+            <Button asChild size="sm" variant="ghost">
+              <a href={keyUrl} target="_blank" rel="noreferrer">
+                Get a key <ArrowSquareOut size={12} />
+              </a>
+            </Button>
+          )}
           {docsUrl && (
             <Button asChild size="sm" variant="ghost">
               <a href={docsUrl} target="_blank" rel="noreferrer">
@@ -139,12 +160,22 @@ export function ProviderKeyRow({ id, name, description, docsUrl, envVar, status,
           className="mt-3 flex flex-col sm:flex-row gap-2"
           onSubmit={(e) => {
             e.preventDefault();
-            if (key.trim().length >= 8) save.mutate();
+            if (key.trim().length >= 8 && extraValid) save.mutate();
           }}
         >
+          {extraFields.map((f) => (
+            <Input
+              key={f.key}
+              value={extraValue(f.key)}
+              onChange={(e) => setExtra((x) => ({ ...x, [f.key]: e.target.value }))}
+              placeholder={f.label + (f.optional ? " (optional)" : "")}
+              title={f.placeholder}
+              className="font-mono sm:max-w-[240px]"
+            />
+          ))}
           <Input type="password" autoComplete="off" autoFocus value={key} onChange={(e) => setKey(e.target.value)} placeholder={`Paste your ${name} API key`} className="font-mono" />
           <div className="flex gap-2">
-            <Button type="submit" variant="primary" loading={save.isPending} disabled={key.trim().length < 8}>
+            <Button type="submit" variant="primary" loading={save.isPending} disabled={key.trim().length < 8 || !extraValid}>
               Save & test
             </Button>
             <Button type="button" variant="ghost" onClick={() => setEditing(false)}>
@@ -184,16 +215,25 @@ export function AiProviderKeys({ only }: { only?: string[] }) {
     <div className="rounded-xl border border-line bg-surface divide-y divide-line">
       {ids.map((id) => {
         const c = meta.aiProviders[id];
-        return <ProviderKeyRow key={id} id={id} name={c.name} docsUrl={c.docsUrl} envVar={c.envVar} capabilities={c.capabilities} status={data?.providers.find((x) => x.provider === id)} />;
+        return <ProviderKeyRow key={id} id={id} name={c.name} docsUrl={c.docsUrl} keyUrl={c.keyUrl} envVar={c.envVar} capabilities={c.capabilities} extraFields={c.extraFields} status={data?.providers.find((x) => x.provider === id)} />;
       })}
     </div>
   );
 }
 
-type Kind = "text" | "image" | "video";
-const KIND_LABEL: Record<Kind, string> = { text: "Text & reasoning", image: "Images", video: "Video" };
+type Kind = "text" | "reasoning" | "vision" | "fast" | "image" | "video";
+const KIND_LABEL: Record<Kind, string> = { text: "Main AI (agents)", reasoning: "Thinking & planning", vision: "Vision (images & video)", fast: "Fast tasks", image: "Image generation", video: "Video generation" };
+const KIND_HELP: Record<Kind, string> = {
+  text: "Runs agents and tool calls.",
+  reasoning: "Campaign plans, opportunities, audits, insights.",
+  vision: "Looks at images and video frames.",
+  fast: "Inbox triage and quick classification.",
+  image: "Generates and edits images.",
+  video: "Generates video clips.",
+};
+const ROLE_KINDS: Kind[] = ["text", "reasoning", "vision", "fast"];
 
-export type AiConfigValue = Partial<Record<"textProvider" | "textModel" | "imageProvider" | "imageModel" | "videoProvider" | "videoModel" | "transcriptionProvider", string | null>>;
+export type AiConfigValue = Partial<Record<`${Kind}Provider` | `${Kind}Model` | "transcriptionProvider", string | null>>;
 
 /** Project-level choice of provider + model per modality. Model ids are free text (suggestions from the catalog). */
 export function AiConfigEditor({ projectId, initial, onSaved, saveLabel = "Save AI configuration", secondaryAction }: { projectId: string; initial: AiConfigValue | null | undefined; onSaved?: () => void; saveLabel?: string; secondaryAction?: React.ReactNode }) {
@@ -216,23 +256,32 @@ export function AiConfigEditor({ projectId, initial, onSaved, saveLabel = "Save 
     },
     onError: (e) => toastError(e),
   });
+  const nvidiaModels = useQuery({ queryKey: ["providers", "nvidia-models"], queryFn: () => api.get<{ models: string[] }>("/providers/nvidia/models"), staleTime: 3600_000 });
   if (!meta) return <Skeleton className="h-40" />;
   const configured = (id: string) => !!prov?.providers.find((x) => x.provider === id)?.configured;
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-line bg-surface divide-y divide-line">
-        {(["text", "image", "video"] as Kind[]).map((kind) => {
-          const providers = Object.values(meta.aiProviders).filter((c: any) => c.capabilities.includes(kind));
+        {(["text", "reasoning", "vision", "fast", "image", "video"] as Kind[]).map((kind) => {
+          const isRole = ROLE_KINDS.includes(kind);
+          const capability = kind === "vision" ? "vision" : isRole ? "text" : kind;
+          const providers = Object.values(meta.aiProviders).filter((c: any) => c.capabilities.includes(capability) && (kind !== "text" || c.capabilities.includes("tools")));
           const pk = `${kind}Provider` as const;
           const mk = `${kind}Model` as const;
           const current = value[pk] ?? "";
           const cat = current ? meta.aiProviders[current] : null;
-          const models: { id: string; label: string }[] = cat ? cat.models.filter((m: any) => m.kind === kind) : [];
+          const defaultFor = (c: any): string | null => (c?.defaultModels?.[kind] ?? (isRole ? c?.defaultModels?.text : undefined)) ?? null;
+          const catalogModels: { id: string; label: string }[] = cat ? cat.models.filter((m: any) => (isRole ? m.kind === "text" && (!m.roles || m.roles.includes(kind)) : m.kind === kind)) : [];
+          const models =
+            current === "nvidia" && isRole
+              ? [...catalogModels, ...(nvidiaModels.data?.models ?? []).filter((id) => !catalogModels.some((m) => m.id === id)).map((id) => ({ id, label: id }))]
+              : catalogModels;
           const listId = `models-${kind}`;
           return (
             <div key={kind} className="grid gap-3 sm:grid-cols-[160px_1fr_1fr] items-start px-4 py-3.5">
               <div>
                 <div className="text-[13px] font-medium text-ink">{KIND_LABEL[kind]}</div>
+                <div className="text-[11.5px] text-muted">{KIND_HELP[kind]}</div>
                 {current && !configured(current) && <div className="text-[11.5px] text-yellow-fg mt-0.5">No key for this provider yet</div>}
               </div>
               <Field label="Provider">
@@ -240,10 +289,10 @@ export function AiConfigEditor({ projectId, initial, onSaved, saveLabel = "Save 
                   value={current}
                   onChange={(e) => {
                     const np = e.target.value;
-                    setValue((s) => ({ ...s, [pk]: np || null, [mk]: np ? (meta.aiProviders[np]?.defaultModels?.[kind] ?? null) : null }));
+                    setValue((s) => ({ ...s, [pk]: np || null, [mk]: np ? defaultFor(meta.aiProviders[np]) : null }));
                   }}
                 >
-                  <option value="">Automatic (first configured)</option>
+                  <option value="">{isRole && kind !== "text" ? "Same as main AI" : "Automatic (first configured)"}</option>
                   {providers.map((c: any) => (
                     <option key={c.id} value={c.id}>
                       {c.name}
@@ -252,8 +301,8 @@ export function AiConfigEditor({ projectId, initial, onSaved, saveLabel = "Save 
                   ))}
                 </Select>
               </Field>
-              <Field label="Model" hint={cat ? `Default: ${cat.defaultModels?.[kind] ?? "—"}` : "Pick a provider to choose a model."}>
-                <Input list={listId} value={value[mk] ?? ""} disabled={!current} placeholder={cat?.defaultModels?.[kind] ?? "model id"} onChange={(e) => setValue((s) => ({ ...s, [mk]: e.target.value }))} className="font-mono text-[12.5px]" />
+              <Field label="Model" hint={cat ? `Default: ${defaultFor(cat) ?? "—"}` : "Pick a provider to choose a model."}>
+                <Input list={listId} value={value[mk] ?? ""} disabled={!current} placeholder={defaultFor(cat) ?? "model id"} onChange={(e) => setValue((s) => ({ ...s, [mk]: e.target.value }))} className="font-mono text-[12.5px]" />
                 <datalist id={listId}>
                   {models.map((m) => (
                     <option key={m.id} value={m.id}>

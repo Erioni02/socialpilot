@@ -45,6 +45,7 @@ export async function runWebsiteAudit(payload: { auditId: string }) {
           schemaHint:
             '{"summary": string, "priorities": [{"title": string, "why": string, "issueIds": string[], "effort": "low"|"medium"|"high", "impact": "low"|"medium"|"high"}], "messaging": string[], "contentOpportunities": string[], "conversionIdeas": string[]}',
           schema: recSchema,
+          role: "reasoning",
           maxTokens: 4000,
         },
         project,

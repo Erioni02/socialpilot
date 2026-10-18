@@ -28,6 +28,7 @@ import { draftReply, feedbackSummary, sendReply } from "../inbox/service";
 import { generateOpportunities, listDiscoverItems, refreshDiscover } from "../discover/service";
 import { listDeployments, listRepoFiles, proposeCodeChange, readRepoFile, requestMerge, requestPromotion, submitCodeChange } from "../website/code";
 import { runWebsiteAudit } from "../website/audit";
+import { analyzeMedia } from "../media/vision";
 import { notify } from "../infra/audit";
 import { emit } from "../infra/events";
 
@@ -576,6 +577,17 @@ export const TOOLS: AgentTool[] = [
       await ownedAsset(ctx.project.id, args.assetId);
       const r = await applyImageOp({ userId: ctx.userId, projectId: ctx.project.id, taskId: ctx.task.id, project: ctx.project, createdBy: `agent:${ctx.actor.agentType}` }, args.assetId, args.operation);
       return { newVersions: r.versions.map((v) => ({ versionId: v.id, version: v.version, width: v.width, height: v.height })), createdAssets: (r.createdAssets ?? []).map(assetView) };
+    },
+  },
+  {
+    name: "analyze_media",
+    description: "Look at an image or video asset with the vision model and answer a question about it (videos are sampled into frames). Use before editing, captioning or judging media.",
+    permission: null,
+    paid: true,
+    schema: z.object({ assetId: z.string(), question: z.string().max(2000).optional(), frames: z.number().int().min(2).max(10).default(6) }),
+    jsonSchema: obj({ assetId: str("Image or video asset id"), question: str("What to look for (optional)"), frames: num("Frames to sample from videos (2-10)") }, ["assetId"]),
+    async run(args, ctx) {
+      return analyzeMedia({ userId: ctx.userId, projectId: ctx.project.id, taskId: ctx.task.id, project: ctx.project }, args.assetId, args.question, args.frames);
     },
   },
   {

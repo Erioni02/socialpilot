@@ -61,6 +61,12 @@ export const analyzeUrlSchema = z.object({ url, maxPages: z.number().int().min(1
 export const aiConfigSchema = z.object({
   textProvider: z.string().max(40).optional().nullable(),
   textModel: z.string().max(120).optional().nullable(),
+  reasoningProvider: z.string().max(40).optional().nullable(),
+  reasoningModel: z.string().max(120).optional().nullable(),
+  visionProvider: z.string().max(40).optional().nullable(),
+  visionModel: z.string().max(120).optional().nullable(),
+  fastProvider: z.string().max(40).optional().nullable(),
+  fastModel: z.string().max(120).optional().nullable(),
   imageProvider: z.string().max(40).optional().nullable(),
   imageModel: z.string().max(120).optional().nullable(),
   videoProvider: z.string().max(40).optional().nullable(),
@@ -75,6 +81,8 @@ export const providerCredentialSchema = z.object({
   apiKey: z.string().min(8).max(4000).optional(),
   clientId: z.string().min(2).max(500).optional(),
   clientSecret: z.string().min(2).max(2000).optional(),
+  accountId: z.string().min(4).max(100).optional(),
+  baseUrl: z.string().url().max(300).optional(),
 });
 
 export const campaignSchema = z.object({

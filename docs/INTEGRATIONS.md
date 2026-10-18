@@ -78,6 +78,9 @@ Token based. Create an access token at vercel.com/account/tokens and enter the p
 
 | Provider | Used for | Key |
 |---|---|---|
+| **NVIDIA API Catalog** (recommended main AI) | Agents with tool calling (default `moonshotai/kimi-k2.6`), thinking/planning (`nvidia/nemotron-3-ultra-550b-a55b`), vision for images and sampled video frames (`nvidia/nemotron-3.5-super-vl-120b-a12b`, or `nvidia/cosmos-reason2-8b` for video), fast triage (`z-ai/glm-5.3-flash`). Each role is configurable per project. | `NVIDIA_API_KEY` or Settings |
+| **Cloudflare Workers AI** | Image generation (FLUX.1 schnell by default; SDXL models available) and img2img edits | `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` |
+| **ByteDance Seedance** (BytePlus ModelArk) | Video generation (text-to-video, first-frame image-to-video) | `BYTEPLUS_API_KEY` (+ optional `BYTEPLUS_BASE_URL`) |
 | Anthropic | Agents (tool use), text, vision. Default model `claude-opus-5-5`; server-side refusal fallback enabled | `ANTHROPIC_API_KEY` or Settings |
 | OpenAI | Agents (tool use), text, `gpt-image-1` generation and edits, Whisper subtitles | `OPENAI_API_KEY` |
 | Google Gemini | Text and vision (not used for agents) | `GEMINI_API_KEY` |
@@ -85,5 +88,7 @@ Token based. Create an access token at vercel.com/account/tokens and enter the p
 | Stability AI | Image generation, background removal | `STABILITY_API_KEY` |
 | NewsAPI / Product Hunt | Extra Discover sources | Settings → Data sources |
 | PageSpeed Insights | Lighthouse scores in audits (works keyless at low quota) | optional |
+
+**Model roles:** each project picks a provider and model for *Main AI*, *Thinking & planning*, *Vision*, *Fast tasks*, *Image generation* and *Video generation* (Project settings → AI). Main models without native vision get attachments described by the vision model, and agents have an `analyze_media` tool that sends images, or FFmpeg-sampled video frames, to the vision model.
 
 Model IDs are free text in project AI settings, so newer models can be used without code changes. Cost estimates for budget enforcement are in `packages/shared/src/pricing.ts`.

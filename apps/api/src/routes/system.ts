@@ -2,7 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "@socialpilot/db";
 import { badRequest, config, redactString } from "@socialpilot/core";
-import { testProvider } from "@socialpilot/ai";
+import { listNvidiaModels, testProvider } from "@socialpilot/ai";
 import { AI_PROVIDER_CATALOG, AGENT_LABELS, AUTONOMY_LABELS, CAPABILITY_REGISTRY, DATA_PROVIDER_CATALOG, INTEGRATION_CATALOG, PERMISSION_LABELS, providerCredentialSchema } from "@socialpilot/shared";
 import { audit, credentialStatus, ffmpeg, resolveSecret, saveCredential } from "@socialpilot/engine";
 import { parse, userOf } from "../lib/http";
@@ -56,8 +56,9 @@ export default async function systemRoutes(app: FastifyInstance) {
     if (provider.startsWith("oauth:")) {
       if (!body.clientId || !body.clientSecret) throw badRequest("Client ID and client secret are required");
     } else if (!body.apiKey) throw badRequest("API key is required");
+    if (provider === "cloudflare" && !body.accountId) throw badRequest("Cloudflare also needs your account ID");
     const user = userOf(req);
-    await saveCredential(user.id, provider, { apiKey: body.apiKey, clientId: body.clientId, clientSecret: body.clientSecret }, body.label);
+    await saveCredential(user.id, provider, { apiKey: body.apiKey, clientId: body.clientId, clientSecret: body.clientSecret, accountId: body.accountId, baseUrl: body.baseUrl }, body.label);
     await audit({ userId: user.id, actor: "user", action: "credential.saved", target: provider, ip: req.ip });
     return { ok: true };
   });
@@ -78,7 +79,7 @@ export default async function systemRoutes(app: FastifyInstance) {
     let ok = false;
     let message = "";
     try {
-      if (provider in AI_PROVIDER_CATALOG) message = await testProvider(provider, secret.apiKey!);
+      if (provider in AI_PROVIDER_CATALOG) message = await testProvider(provider, { apiKey: secret.apiKey!, accountId: secret.accountId, baseUrl: secret.baseUrl });
       else if (provider === "newsapi") {
         const r = await fetch("https://newsapi.org/v2/top-headlines?category=technology&pageSize=1&language=en", { headers: { "x-api-key": secret.apiKey! } });
         const j: any = await r.json();
@@ -109,6 +110,9 @@ export default async function systemRoutes(app: FastifyInstance) {
     }
     return { ok, message };
   });
+
+  /** Live list of models on NVIDIA API Catalog (public endpoint), used for model pickers. */
+  app.get("/providers/nvidia/models", { preHandler: app.requireAuth }, async () => ({ models: await listNvidiaModels() }));
 
   app.get("/notifications", { preHandler: app.requireAuth }, async (req) => {
     const q = parse(z.object({ unread: z.coerce.boolean().optional(), limit: z.coerce.number().int().min(1).max(100).default(30) }), req.query);

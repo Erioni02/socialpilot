@@ -2,11 +2,16 @@ import { prisma } from "@socialpilot/db";
 import { decryptJson, encryptJson, hint, SetupRequiredError } from "@socialpilot/core";
 import { AI_PROVIDER_CATALOG, DATA_PROVIDER_CATALOG, INTEGRATION_CATALOG, type IntegrationProvider } from "@socialpilot/shared";
 
-type Secret = { apiKey?: string; clientId?: string; clientSecret?: string };
+type Secret = { apiKey?: string; clientId?: string; clientSecret?: string; accountId?: string; baseUrl?: string };
 
 /** Env var names for each credential provider id. */
-function envFor(provider: string): { apiKey?: string; clientId?: string; clientSecret?: string } {
-  if (provider in AI_PROVIDER_CATALOG) return { apiKey: process.env[AI_PROVIDER_CATALOG[provider as keyof typeof AI_PROVIDER_CATALOG].envVar] };
+function envFor(provider: string): Secret {
+  if (provider in AI_PROVIDER_CATALOG) {
+    const entry = AI_PROVIDER_CATALOG[provider as keyof typeof AI_PROVIDER_CATALOG];
+    const out: Secret = { apiKey: process.env[entry.envVar] };
+    for (const f of entry.extraFields ?? []) if (process.env[f.envVar]) out[f.key] = process.env[f.envVar];
+    return out;
+  }
   if (provider in DATA_PROVIDER_CATALOG) return { apiKey: process.env[DATA_PROVIDER_CATALOG[provider as keyof typeof DATA_PROVIDER_CATALOG].envVar] };
   if (provider.startsWith("oauth:")) {
     const entry = INTEGRATION_CATALOG[provider.slice(6) as IntegrationProvider];
@@ -44,6 +49,13 @@ export async function getApiKey(userId: string, provider: string): Promise<strin
   return (await resolveSecret(userId, provider))?.apiKey ?? null;
 }
 
+/** Full credential bundle for AI/media providers (API key + account ID / base URL where needed). */
+export async function getProviderCreds(userId: string, provider: string): Promise<{ apiKey: string; accountId?: string; baseUrl?: string } | null> {
+  const s = await resolveSecret(userId, provider);
+  if (!s?.apiKey) return null;
+  return { apiKey: s.apiKey, accountId: s.accountId, baseUrl: s.baseUrl };
+}
+
 export async function requireApiKey(userId: string, provider: string): Promise<string> {
   const key = await getApiKey(userId, provider);
   if (!key) {
@@ -60,7 +72,7 @@ export async function getAppCredentials(userId: string, provider: IntegrationPro
 
 /** Lists which providers are configured, never exposing values. */
 export async function credentialStatus(userId: string) {
-  const rows = await prisma.providerCredential.findMany({ where: { userId }, select: { provider: true, hint: true, status: true, lastTestedAt: true, lastError: true, label: true, updatedAt: true } });
+  const rows = await prisma.providerCredential.findMany({ where: { userId }, select: { provider: true, hint: true, status: true, lastTestedAt: true, lastError: true, label: true, updatedAt: true, secretEnc: true } });
   const byProvider = new Map(rows.map((r) => [r.provider, r]));
   const providers = [
     ...Object.keys(AI_PROVIDER_CATALOG),
@@ -73,8 +85,14 @@ export async function credentialStatus(userId: string) {
     const row = byProvider.get(p);
     const env = envFor(p);
     const envConfigured = !!(env.apiKey || (env.clientId && env.clientSecret));
+    let extra: Record<string, string | undefined> | null = null;
+    if (row && p in AI_PROVIDER_CATALOG) {
+      const sec = decryptJson<Secret>(row.secretEnc);
+      extra = { accountId: sec?.accountId, baseUrl: sec?.baseUrl };
+    }
     return {
       provider: p,
+      extra,
       configured: !!row || envConfigured,
       source: row ? "user" : envConfigured ? "env" : null,
       hint: row?.hint ?? null,

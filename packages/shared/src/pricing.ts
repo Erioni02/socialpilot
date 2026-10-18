@@ -12,6 +12,10 @@ export const TEXT_PRICES: Record<string, { input: number; output: number }> = {
   "gemini-2.5-pro": { input: 1.25, output: 10 },
   "gemini-2.5-flash": { input: 0.3, output: 2.5 },
 };
+// NVIDIA API Catalog trial usage is credit-based (no per-token billing); counted as 0 for budgets.
+const NVIDIA_FREE = { input: 0, output: 0 };
+for (const m of ["moonshotai/", "nvidia/", "meta/", "z-ai/", "openai/gpt-oss", "qwen/", "deepseek-ai/", "mistralai/", "google/", "microsoft/"]) TEXT_PRICES[m] = NVIDIA_FREE;
+
 export const DEFAULT_TEXT_PRICE = { input: 5, output: 20 };
 
 export const UNIT_PRICES: Record<string, number> = {
@@ -26,6 +30,12 @@ export const UNIT_PRICES: Record<string, number> = {
   "minimax/video-01": 0.5,
   "kwaivgi/kling-v2.1": 0.3,
   "whisper-1": 0.006,
+  "@cf/black-forest-labs/flux-1-schnell": 0.0015,
+  "@cf/bytedance/stable-diffusion-xl-lightning": 0,
+  "@cf/stabilityai/stable-diffusion-xl-base-1.0": 0,
+  "@cf/runwayml/stable-diffusion-v1-5-img2img": 0,
+  "dreamina-seedance-2-0-fast-260128": 0.4, // estimate per 5s 720p clip
+  "dreamina-seedance-2-0-260128": 0.8,
 };
 
 export function estimateTextCost(model: string, inputTokens: number, outputTokens: number): number {

@@ -13,7 +13,22 @@ import type {
   TurnResult,
 } from "./types";
 
-const BASE = "https://api.openai.com/v1";
+const OPENAI_BASE = "https://api.openai.com/v1";
+
+/** Removes <think>…</think> reasoning traces some open models put in the visible content. */
+export function stripThinking(text: string): string {
+  return text
+    .replace(/<think>[\s\S]*?<\/think>/gi, "")
+    .replace(/^[\s\S]*?<\/think>/i, "")
+    .trim();
+}
+
+export interface OpenAICompatibleOptions {
+  id?: string;
+  baseUrl?: string;
+  /** OpenAI uses max_completion_tokens; most other OpenAI-compatible APIs use max_tokens. */
+  tokenParam?: "max_completion_tokens" | "max_tokens";
+}
 
 type OAMessage = Record<string, unknown>;
 
@@ -25,20 +40,23 @@ function userContent(text: string, images: ImageInput[] = []) {
   ];
 }
 
-export function openaiProvider(apiKey: string): TextProvider & ImageProvider & TranscriptionProvider {
+export function openaiProvider(apiKey: string, opts: OpenAICompatibleOptions = {}): TextProvider & ImageProvider & TranscriptionProvider {
+  const BASE = opts.baseUrl ?? OPENAI_BASE;
+  const PID = opts.id ?? "openai";
+  const tokenParam = opts.tokenParam ?? "max_completion_tokens";
   const headers = { authorization: `Bearer ${apiKey}`, "content-type": "application/json" };
 
   async function chat(model: string, messages: OAMessage[], tools?: ChatSessionOptions["tools"], maxTokens?: number) {
-    const body: Record<string, unknown> = { model, messages, max_completion_tokens: maxTokens ?? 8000 };
+    const body: Record<string, unknown> = { model, messages, [tokenParam]: maxTokens ?? 8000 };
     if (tools?.length) {
       body.tools = tools.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.inputSchema } }));
       body.tool_choice = "auto";
     }
-    const r = await providerFetch<any>("openai", `${BASE}/chat/completions`, { method: "POST", headers, body: JSON.stringify(body), timeoutMs: 180000 });
+    const r = await providerFetch<any>(PID, `${BASE}/chat/completions`, { method: "POST", headers, body: JSON.stringify(body), timeoutMs: 180000 });
     const choice = r.choices?.[0];
     const msg = choice?.message ?? {};
     const turn: TurnResult = {
-      text: (msg.content ?? "").trim(),
+      text: stripThinking(msg.content ?? ""),
       toolCalls: (msg.tool_calls ?? []).map((c: any) => {
         let input: Record<string, unknown> = {};
         try {
@@ -69,7 +87,7 @@ export function openaiProvider(apiKey: string): TextProvider & ImageProvider & T
   }
 
   return {
-    id: "openai",
+    id: PID,
     async complete(opts: CompleteOptions) {
       const messages: OAMessage[] = [];
       if (opts.system) messages.push({ role: "system", content: opts.system });
@@ -85,7 +103,7 @@ export function openaiProvider(apiKey: string): TextProvider & ImageProvider & T
         return turn;
       };
       return {
-        provider: "openai",
+        provider: PID,
         model: opts.model,
         async sendUser(text, images) {
           history.push({ role: "user", content: userContent(text, images) });
@@ -99,11 +117,11 @@ export function openaiProvider(apiKey: string): TextProvider & ImageProvider & T
       };
     },
     async test() {
-      const r = await providerFetch<any>("openai", `${BASE}/models`, { headers });
+      const r = await providerFetch<any>(PID, `${BASE}/models`, { headers });
       return `Connected — ${r.data?.length ?? 0} models available`;
     },
     async generate(opts: ImageGenOptions) {
-      const r = await providerFetch<any>("openai", `${BASE}/images/generations`, {
+      const r = await providerFetch<any>(PID, `${BASE}/images/generations`, {
         method: "POST",
         headers,
         timeoutMs: 240000,
@@ -118,7 +136,7 @@ export function openaiProvider(apiKey: string): TextProvider & ImageProvider & T
       if (opts.size) form.append("size", opts.size);
       const ext = opts.image.mimeType.split("/")[1] ?? "png";
       form.append("image", new Blob([new Uint8Array(opts.image.data)], { type: opts.image.mimeType }), `image.${ext}`);
-      const r = await providerFetch<any>("openai", `${BASE}/images/edits`, {
+      const r = await providerFetch<any>(PID, `${BASE}/images/edits`, {
         method: "POST",
         headers: { authorization: `Bearer ${apiKey}` },
         body: form,

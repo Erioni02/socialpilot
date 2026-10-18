@@ -71,6 +71,7 @@ export async function generateCampaignPlan(userId: string, project: Project, cam
       schemaHint:
         '{"summary": string, "pillars": string[], "kpis": string[], "posts": [{"day": number, "time": "HH:MM", "platforms": ("x"|"instagram"|"tiktok")[], "type": "text"|"thread"|"image"|"carousel"|"video"|"reel", "title": string, "body": string (master caption), "thread"?: string[] (X thread parts), "xText"?: string (≤280 chars X version), "hashtags": string[], "cta": string, "imagePrompt"?: string, "pillar"?: string}]}',
       schema: planSchema,
+      role: "reasoning",
       maxTokens: 12000,
     },
     project,

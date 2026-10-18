@@ -15,7 +15,7 @@ export type IntegrationProvider = (typeof INTEGRATION_PROVIDERS)[number];
 export const INTEGRATION_KINDS = ["social", "analytics", "repository", "deployment"] as const;
 export type IntegrationKind = (typeof INTEGRATION_KINDS)[number];
 
-export const AI_PROVIDERS = ["anthropic", "openai", "gemini", "replicate", "stability"] as const;
+export const AI_PROVIDERS = ["nvidia", "anthropic", "openai", "gemini", "cloudflare", "byteplus", "replicate", "stability"] as const;
 export type AiProviderId = (typeof AI_PROVIDERS)[number];
 
 /** Non-AI data providers that use API keys (search / news / measurement). */

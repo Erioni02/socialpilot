@@ -111,6 +111,7 @@ export default async function engagementRoutes(app: FastifyInstance) {
           schemaHint: '{"working": string[], "declining": string[], "hypotheses": string[], "testsToRun": [{"test": string, "metric": string, "expectedEffect": string}]}',
           schema: z.object({ working: z.array(z.string()).default([]), declining: z.array(z.string()).default([]), hypotheses: z.array(z.string()).default([]), testsToRun: z.array(z.object({ test: z.string(), metric: z.string(), expectedEffect: z.string() })).default([]) }),
           maxTokens: 2500,
+          role: "reasoning",
         },
         req.project,
       );

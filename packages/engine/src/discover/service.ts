@@ -152,6 +152,7 @@ export async function getBriefing(userId: string, project: Project | null, opts:
             .join("\n")}\n</items>\n\nGroup into 3-5 sections (e.g. Top developments, AI models & tools, Startups, Developer ecosystem, Social conversations).`,
           schemaHint: '{"headline": string, "sections": [{"title": string, "items": [{"itemId": string, "summary": string, "whyItMatters": string}]}]}',
           schema: briefingSchema,
+          role: "reasoning",
           maxTokens: 4000,
         },
         project,
@@ -230,6 +231,7 @@ export async function generateOpportunities(userId: string, project: Project, co
         schemaHint:
           '{"opportunities": [{"itemIds": string[], "title": string, "whatHappened": string, "whyItMatters": string, "relevance": string, "angle": string, "audience": string, "platform": "x"|"instagram"|"tiktok"|..., "hook": string, "outline": string[], "cta": string, "timeliness": string, "confidence": "low"|"medium"|"high", "risks": string}]}',
         schema: oppSchema,
+        role: "reasoning",
         maxTokens: 6000,
       },
       project,

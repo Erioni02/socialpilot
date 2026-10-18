@@ -98,6 +98,7 @@ export async function classifyItems(projectId: string, ids: string[]) {
             .join("\n")}\n</comments>`,
           schemaHint: `{"items": [{"id": string, "classification": ${INBOX_CLASSES.map((c) => `"${c}"`).join("|")}, "sentiment": "positive"|"neutral"|"negative", "priority": 0-3, "draft": string}]}`,
           schema,
+          role: "fast",
           maxTokens: 4000,
         },
         project,

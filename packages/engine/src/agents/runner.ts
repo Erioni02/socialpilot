@@ -9,6 +9,7 @@ import { emit } from "../infra/events";
 import { enqueue } from "../infra/queue";
 import { audit, notify } from "../infra/audit";
 import { loadAsset } from "../media/service";
+import { analyzeMedia } from "../media/vision";
 import { executeTool, toolDefs, type ToolContext } from "./tools";
 
 const log = createLogger("agent");
@@ -145,6 +146,21 @@ export async function runAgentTask(payload: { taskId: string }) {
     const att = await attachmentImages(project.id, input.attachmentAssetIds ?? []);
     let userText = `Task from the project owner:\n${task.instruction}`;
     if (att.notes.length) userText += `\n\nAttached assets:\n${att.notes.join("\n")}`;
+    // Models without native vision (e.g. most NVIDIA text models) get descriptions from the vision model instead of raw pixels.
+    const nativeVision = ai.providerId === "anthropic" || ai.providerId === "openai";
+    if (att.images.length && !nativeVision) {
+      const descriptions: string[] = [];
+      for (const id of (input.attachmentAssetIds ?? []).slice(0, 4)) {
+        try {
+          const d = await analyzeMedia({ userId: project.ownerId, projectId: project.id, taskId: task.id, project }, id);
+          descriptions.push(`- ${id} (${d.model}): ${d.analysis}`);
+        } catch (e) {
+          descriptions.push(`- ${id}: could not analyze (${(e as Error).message})`);
+        }
+      }
+      userText += `\n\nVision model descriptions of the attachments (use analyze_media for follow-up questions):\n${descriptions.join("\n")}`;
+      att.images = [];
+    }
     if (input.context && Object.keys(input.context).length) userText += `\n\nContext (from the app):\n<untrusted_content>${JSON.stringify(input.context).slice(0, 6000)}</untrusted_content>`;
     await step(task.id, seq, { type: "message", input: { role: "user", text: task.instruction } });
     await setStatus({ status: "running" });

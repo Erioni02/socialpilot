@@ -4,13 +4,28 @@ import { openaiProvider } from "./openai";
 import { geminiProvider } from "./gemini";
 import { replicateProvider, replicateVideoProvider } from "./replicate";
 import { stabilityProvider } from "./stability";
+import { nvidiaProvider, listNvidiaModels } from "./nvidia";
+import { cloudflareProvider } from "./cloudflare";
+import { seedanceProvider } from "./seedance";
 import type { CompleteOptions, ImageProvider, TextProvider, TranscriptionProvider, Usage, VideoProvider } from "./types";
 
 export * from "./types";
-export { anthropicProvider, openaiProvider, geminiProvider, replicateProvider, replicateVideoProvider, stabilityProvider };
+export { anthropicProvider, openaiProvider, geminiProvider, replicateProvider, replicateVideoProvider, stabilityProvider, nvidiaProvider, listNvidiaModels, cloudflareProvider, seedanceProvider };
+export { stripThinking } from "./openai";
 
-export function textProvider(provider: string, apiKey: string): TextProvider {
+/** Credential bundle: most providers need only apiKey; Cloudflare also needs accountId, BytePlus may set a regional baseUrl. */
+export interface ProviderCredentials {
+  apiKey: string;
+  accountId?: string;
+  baseUrl?: string;
+}
+const cred = (c: string | ProviderCredentials): ProviderCredentials => (typeof c === "string" ? { apiKey: c } : c);
+
+export function textProvider(provider: string, c: string | ProviderCredentials): TextProvider {
+  const { apiKey } = cred(c);
   switch (provider) {
+    case "nvidia":
+      return nvidiaProvider(apiKey);
     case "anthropic":
       return anthropicProvider(apiKey);
     case "openai":
@@ -22,8 +37,11 @@ export function textProvider(provider: string, apiKey: string): TextProvider {
   }
 }
 
-export function imageProvider(provider: string, apiKey: string): ImageProvider {
+export function imageProvider(provider: string, c: string | ProviderCredentials): ImageProvider {
+  const { apiKey, accountId } = cred(c);
   switch (provider) {
+    case "cloudflare":
+      return cloudflareProvider(apiKey, accountId ?? "");
     case "openai":
       return openaiProvider(apiKey);
     case "replicate":
@@ -35,8 +53,10 @@ export function imageProvider(provider: string, apiKey: string): ImageProvider {
   }
 }
 
-export function videoProvider(provider: string, apiKey: string): VideoProvider {
+export function videoProvider(provider: string, c: string | ProviderCredentials): VideoProvider {
+  const { apiKey, baseUrl } = cred(c);
   if (provider === "replicate") return replicateVideoProvider(apiKey);
+  if (provider === "byteplus") return seedanceProvider(apiKey, baseUrl || undefined);
   throw new Error(`Unsupported video provider: ${provider}`);
 }
 
@@ -45,8 +65,14 @@ export function transcriptionProvider(provider: string, apiKey: string): Transcr
   throw new Error(`Unsupported transcription provider: ${provider}`);
 }
 
-export async function testProvider(provider: string, apiKey: string): Promise<string> {
+export async function testProvider(provider: string, c: string | ProviderCredentials): Promise<string> {
+  const { apiKey, accountId, baseUrl } = cred(c);
   switch (provider) {
+    case "cloudflare":
+      return cloudflareProvider(apiKey, accountId ?? "").test();
+    case "byteplus":
+      return seedanceProvider(apiKey, baseUrl || undefined).test();
+    case "nvidia":
     case "anthropic":
     case "openai":
     case "gemini":

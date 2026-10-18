@@ -178,12 +178,68 @@ export interface AiProviderCatalogEntry {
   name: string;
   capabilities: ("text" | "vision" | "tools" | "image" | "image_edit" | "remove_background" | "video" | "transcription")[];
   envVar: string;
+  /** Extra non-secret fields stored with the key (e.g. Cloudflare account ID, BytePlus region URL). */
+  extraFields?: { key: "accountId" | "baseUrl"; label: string; envVar: string; optional?: boolean; placeholder?: string }[];
   docsUrl: string;
-  defaultModels: Partial<Record<"text" | "image" | "video" | "transcription", string>>;
-  models: { id: string; kind: "text" | "image" | "video" | "transcription"; label: string }[];
+  keyUrl?: string;
+  defaultModels: Partial<Record<ModelRole | "image" | "video" | "transcription", string>>;
+  models: { id: string; kind: "text" | "image" | "video" | "transcription"; label: string; roles?: ModelRole[] }[];
 }
 
+/** Which job a text model does: main (agents/tool use), reasoning (planning/analysis), vision (images & video frames), fast (cheap classification). */
+export type ModelRole = "text" | "reasoning" | "vision" | "fast";
+
 export const AI_PROVIDER_CATALOG: Record<AiProviderId, AiProviderCatalogEntry> = {
+  nvidia: {
+    id: "nvidia",
+    name: "NVIDIA API Catalog (build.nvidia.com)",
+    capabilities: ["text", "vision", "tools"],
+    envVar: "NVIDIA_API_KEY",
+    docsUrl: "https://docs.api.nvidia.com/nim/reference/llm-apis",
+    keyUrl: "https://build.nvidia.com/settings/api-keys",
+    defaultModels: { text: "moonshotai/kimi-k2.6", reasoning: "nvidia/nemotron-3-ultra-550b-a55b", vision: "nvidia/nemotron-3.5-super-vl-120b-a12b", fast: "z-ai/glm-5.3-flash" },
+    models: [
+      { id: "moonshotai/kimi-k2.6", kind: "text", label: "Kimi K2.6 — main agent (tool calling)", roles: ["text"] },
+      { id: "z-ai/glm-5.3", kind: "text", label: "GLM 5.3", roles: ["text", "reasoning"] },
+      { id: "nvidia/nemotron-3-ultra-550b-a55b", kind: "text", label: "Nemotron 3 Ultra — reasoning", roles: ["reasoning", "text"] },
+      { id: "nvidia/llama-3.1-nemotron-ultra-253b-v1", kind: "text", label: "Llama 3.1 Nemotron Ultra 253B — reasoning", roles: ["reasoning"] },
+      { id: "nvidia/nemotron-3.5-super-vl-120b-a12b", kind: "text", label: "Nemotron 3.5 Super VL — vision", roles: ["vision"] },
+      { id: "nvidia/cosmos-reason2-8b", kind: "text", label: "Cosmos Reason 2 — video/physical understanding", roles: ["vision"] },
+      { id: "meta/llama-3.2-90b-vision-instruct", kind: "text", label: "Llama 3.2 90B Vision", roles: ["vision"] },
+      { id: "z-ai/glm-5.3-flash", kind: "text", label: "GLM 5.3 Flash — fast/cheap", roles: ["fast"] },
+      { id: "openai/gpt-oss-20b", kind: "text", label: "gpt-oss 20B — fast", roles: ["fast"] },
+    ],
+  },
+  cloudflare: {
+    id: "cloudflare",
+    name: "Cloudflare Workers AI",
+    capabilities: ["image", "image_edit"],
+    envVar: "CLOUDFLARE_API_TOKEN",
+    extraFields: [{ key: "accountId", label: "Account ID", envVar: "CLOUDFLARE_ACCOUNT_ID", placeholder: "32-character account ID" }],
+    docsUrl: "https://developers.cloudflare.com/workers-ai/models/flux-1-schnell/",
+    keyUrl: "https://dash.cloudflare.com/profile/api-tokens",
+    defaultModels: { image: "@cf/black-forest-labs/flux-1-schnell" },
+    models: [
+      { id: "@cf/black-forest-labs/flux-1-schnell", kind: "image", label: "FLUX.1 schnell" },
+      { id: "@cf/bytedance/stable-diffusion-xl-lightning", kind: "image", label: "SDXL Lightning" },
+      { id: "@cf/stabilityai/stable-diffusion-xl-base-1.0", kind: "image", label: "SDXL base 1.0" },
+      { id: "@cf/runwayml/stable-diffusion-v1-5-img2img", kind: "image", label: "SD 1.5 img2img (edits)" },
+    ],
+  },
+  byteplus: {
+    id: "byteplus",
+    name: "ByteDance Seedance (BytePlus ModelArk)",
+    capabilities: ["video"],
+    envVar: "BYTEPLUS_API_KEY",
+    extraFields: [{ key: "baseUrl", label: "API base URL (optional)", envVar: "BYTEPLUS_BASE_URL", optional: true, placeholder: "https://ark.ap-southeast.bytepluses.com/api/v3" }],
+    docsUrl: "https://docs.byteplus.com/en/docs/ModelArk",
+    keyUrl: "https://console.byteplus.com/ark",
+    defaultModels: { video: "dreamina-seedance-2-0-fast-260128" },
+    models: [
+      { id: "dreamina-seedance-2-0-fast-260128", kind: "video", label: "Seedance 2.0 Fast" },
+      { id: "dreamina-seedance-2-0-260128", kind: "video", label: "Seedance 2.0" },
+    ],
+  },
   anthropic: {
     id: "anthropic",
     name: "Anthropic Claude",
