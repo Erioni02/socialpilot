@@ -4,6 +4,7 @@ import { CAPABILITY_REGISTRY, type SocialPlatform } from "@socialpilot/shared";
 import { socialAdapter } from "@socialpilot/social";
 import { dispatchDueTargets } from "./content/publishing";
 import { dispatchDueAutomations } from "./automation/service";
+import { dispatchPostTracking } from "./content/manual";
 import { enqueue } from "./infra/queue";
 import { getCredentials } from "./integrations/service";
 import { getAppCredentials } from "./infra/credentials";
@@ -60,6 +61,7 @@ async function cleanup() {
 
 let lastSlow = 0;
 let lastCleanup = 0;
+let lastTracking = 0;
 
 /** Called every 30 seconds by the worker. All state lives in Postgres, so restarts lose nothing. */
 export async function schedulerTick() {
@@ -76,6 +78,11 @@ export async function schedulerTick() {
     // plus free snapshots of watched profiles/posts.
     await enqueue("intel.pulse", {}, { dedupeKey: `pulse:${bucket(20 * 60_000)}`, maxAttempts: 1 });
     await enqueue("intel.refresh", {}, { dedupeKey: `intel:${bucket(20 * 60_000)}`, maxAttempts: 1 });
+    // Public metrics for manually posted content, on a decaying cadence (20 min while fresh → daily).
+    if (Date.now() - lastTracking > 5 * 60_000) {
+      lastTracking = Date.now();
+      await dispatchPostTracking();
+    }
     if (Date.now() - lastCleanup > 6 * 3600_000) {
       lastCleanup = Date.now();
       await cleanup();

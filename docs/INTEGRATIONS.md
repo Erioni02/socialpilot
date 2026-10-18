@@ -120,6 +120,29 @@ Model IDs are free text in project AI settings, so newer models can be used with
 
 ---
 
+## Publishing without APIs: Ready to post and post tracking
+
+You don't need to connect any social account or developer app to publish and measure.
+
+1. **Send to Ready to post.** In the post editor, click *Send to Ready to post*. A scheduled post for a platform that isn't connected also lands there at its planned time, and you get a notification.
+2. **Ready to post** (sidebar) lists each item per platform with:
+   - the final caption (platform variant, hashtags, CTA, UTM link on X) and a character count;
+   - thread parts and video title;
+   - a posting checklist;
+   - **platform-ready media** — images converted to JPEG and fitted without cropping (Instagram 4:5–1.91:1, TikTok 1080×1920, X original aspect), downloadable one by one or as a ZIP with `caption.txt` and `POSTING-CHECKLIST.txt`.
+3. Post it in the app, then click **I posted it** and paste the post link. The link is validated: it must match the platform, be a post (not a profile), and not already be attached. The item leaves the desk. *Not posted / wrong link* moves it back.
+4. **Analytics → Post performance** tracks it on a decaying schedule: every 20 minutes for 48 hours, every 2 hours until day 7, every 12 hours until day 30, then daily until day 90. Each refresh is stored as a dated snapshot for growth charts.
+
+| Platform | Collected automatically (free, public) | Add yourself (screenshot read by AI or typed) |
+|---|---|---|
+| TikTok | Views, likes, comments, shares, saves | Reach, watch time, profile visits, follows |
+| X | Likes, replies | Views/impressions, reposts, bookmarks, link clicks |
+| Instagram | — (login wall, no public data) | Everything from Insights: views, reach, likes, comments, shares, saves, profile visits, follows |
+
+**Screenshot import:** in a post's detail, click *Read screenshot* and upload the platform's analytics screen. The vision model reads only the visible numbers (abbreviations like 1.2K are flagged), and you confirm or correct them before saving. Values you add are never overwritten by automatic refreshes, and unknown values stay empty, never zero. The report shows totals, engagement rate (engagements ÷ views), per-platform breakdown, top posts and best posting days/hours once there is enough data. Agents read it with `get_post_performance` and `list_ready_to_post`.
+
+**Why not scrape Instagram with Python?** Tested: instaloader without login gets `401 Please wait a few minutes` and `429 Too Many Requests` from Instagram. Logging in a scraper with your account risks the account and is against Instagram's terms. Screenshot import gives exact owner-only numbers instead.
+
 ## Social Pulse (every 20 minutes)
 
 **Social Intel → Pulse** shows what is rising on social media right now, ranked by momentum (how fast a post, topic or search grows between crawls) and, if you pick a project, by how well it matches the project's keywords. The worker crawls every 20 minutes. Free sources are always on:

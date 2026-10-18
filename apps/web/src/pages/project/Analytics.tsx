@@ -11,6 +11,7 @@ import { axisProps, CHART, Legend, SERIES_COLORS, shortDate, tooltipProps } from
 import { SocialSection, type SocialAccount } from "@/components/insights/SocialSection";
 import { WebSection, type WebResponse } from "@/components/insights/WebSection";
 import { TrafficPanel } from "@/components/insights/TrafficPanel";
+import { PostPerformance } from "@/components/insights/PostPerformance";
 import { useProject } from "@/components/common";
 
 type CampaignPerf = {
@@ -303,7 +304,7 @@ export default function Analytics() {
     <PageContainer>
       <PageHeader
         title="Analytics"
-        description="Social and website performance, measured from your connected accounts. Social and website metrics use different definitions and are kept apart."
+        description="Post, social and website performance. Social and website metrics use different definitions and are kept apart."
         actions={
           <Button asChild variant="ghost">
             <Link to={`/projects/${projectId}/integrations`}>
@@ -313,6 +314,13 @@ export default function Analytics() {
         }
       />
       <div className="space-y-10">
+        <section>
+          <SectionIntro title="Post performance">
+            Every post you published, including the ones you posted yourself. Public metrics are collected automatically (every 20 minutes while a post is fresh); numbers only you can see come from your analytics screenshots or manual entry. Missing values show as —, never as zero.
+          </SectionIntro>
+          <PostPerformance projectId={projectId} />
+        </section>
+
         <section>
           <SectionIntro title="Social accounts">Followers, reach and post metrics as reported by each platform's API. Engagement counts likes, comments, shares and saves; views and impressions are excluded.</SectionIntro>
           <SocialSection projectId={projectId} accounts={social.data?.accounts} loading={social.isLoading} />

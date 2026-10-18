@@ -16,6 +16,7 @@ import {
   Info,
   LinkSimple,
   PaperPlaneTilt,
+  DownloadSimple,
   Plus,
   SealCheck,
   Trash,
@@ -318,6 +319,18 @@ export default function PostEditor() {
       if (Array.isArray(e?.details)) e.details.forEach((c: any) => c?.message && toast.error(c.message));
     },
   });
+  const sendToReady = useMutation({
+    mutationFn: () => api.post(p(projectId, `/posts/${postId}/send-to-ready`), { platforms: form?.platforms }),
+    onSuccess: () => {
+      invalidate();
+      qc.invalidateQueries({ queryKey: ["ready", projectId] });
+      toast.success("Sent to Ready to post — download the media and post it yourself", { action: { label: "Open", onClick: () => navigate(`/projects/${projectId}/ready`) } });
+    },
+    onError: (e: any) => {
+      toastError(e);
+      if (Array.isArray(e?.details)) e.details.forEach((c: any) => c?.message && toast.error(c.message));
+    },
+  });
   const [cancelOpen, setCancelOpen] = React.useState(false);
   const [scheduleOpen, setScheduleOpen] = React.useState(false);
   const [deleteOpen, setDeleteOpen] = React.useState(false);
@@ -444,6 +457,11 @@ export default function PostEditor() {
           {canUnschedule && (
             <Button variant="secondary" loading={unschedule.isPending} onClick={() => unschedule.mutate()}>
               <XCircle size={14} /> Unschedule
+            </Button>
+          )}
+          {canSchedule && (
+            <Button variant="secondary" disabled={dirty || !form.platforms.length} loading={sendToReady.isPending} onClick={() => sendToReady.mutate()}>
+              <DownloadSimple size={14} /> Send to Ready to post
             </Button>
           )}
           {canSchedule && (

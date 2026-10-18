@@ -14,6 +14,8 @@ import { prisma } from "@socialpilot/db";
 import { emit } from "./infra/events";
 import { runTrafficReportJob, refreshWatchedIntel } from "./intel/service";
 import { runSocialPulse } from "./intel/pulse";
+import { trackPostedTarget, dispatchPostTracking } from "./content/manual";
+export { dispatchPostTracking };
 
 async function opCtx(projectId: string, createdBy = "user") {
   const project = await prisma.project.findUniqueOrThrow({ where: { id: projectId } });
@@ -54,6 +56,7 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   "traffic.report": (p) => runTrafficReportJob(p),
   "intel.refresh": () => refreshWatchedIntel(),
   "intel.pulse": () => runSocialPulse(),
+  "posts.track": (p) => trackPostedTarget(p),
   "automation.run": (p) => runAutomation(p),
   "approval.execute": (p) => executeApprovalJob(p),
   "media.generateImage": async (p) => {

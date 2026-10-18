@@ -23,7 +23,7 @@ async function mediaKinds(post: Post) {
  * Schedules a post. Humans schedule directly; agents/automations go through the permission gate,
  * and outbound publishing creates an approval when the policy requires it.
  */
-export async function schedulePost(project: Project, postId: string, input: { scheduledAt: Date; timezone?: string; platforms?: SocialPlatform[] }, actor: Actor, opts: { forceApproval?: boolean } = {}) {
+export async function schedulePost(project: Project, postId: string, input: { scheduledAt: Date; timezone?: string; platforms?: SocialPlatform[] }, actor: Actor, opts: { forceApproval?: boolean; manual?: boolean } = {}) {
   const post = await prisma.post.findFirst({ where: { id: postId, projectId: project.id } });
   if (!post) throw notFound("Post");
   if (["published", "publishing", "scheduled"].includes(post.status)) throw badRequest(`Post is already ${post.status}`);
@@ -44,6 +44,10 @@ export async function schedulePost(project: Project, postId: string, input: { sc
   const op = requiredOperation(post, kinds);
   const targets: { platform: SocialPlatform; integrationId: string | null; status: string; lastError?: string }[] = [];
   for (const platform of platforms) {
+    if (opts.manual) {
+      targets.push({ platform, integrationId: null, status: "manual", lastError: "You publish this one yourself from Ready to post." });
+      continue;
+    }
     const integration = await prisma.integration.findFirst({ where: { projectId: project.id, provider: platform, status: { in: ["connected", "error"] } } });
     const unsupported = !CAPABILITY_REGISTRY[platform][op].supported;
     if (!integration || unsupported) {
@@ -308,8 +312,8 @@ export async function dispatchDueTargets() {
       projectId: t.post.projectId,
       type: "publish.manual",
       title: `Manual post due on ${t.platform}`,
-      body: `${t.lastError ?? "This post needs to be published manually."} Open the calendar to copy the content and mark it as published.`,
-      link: `/projects/${t.post.projectId}/calendar?post=${t.postId}`,
+      body: "It's on your Ready to post page with platform-ready media and the caption. After posting, paste the link there.",
+      link: `/projects/${t.post.projectId}/ready`,
     });
   }
   return { enqueued: due.length, manual: manual.length };

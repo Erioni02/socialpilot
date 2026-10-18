@@ -25,6 +25,7 @@ import {
   List,
   FolderSimple,
   Binoculars,
+  PaperPlaneTilt,
 } from "@phosphor-icons/react";
 import { toast } from "sonner";
 import { api } from "@/lib/api";
@@ -39,6 +40,7 @@ const PROJECT_NAV = [
   { to: "content", label: "Content", icon: Article },
   { to: "campaigns", label: "Campaigns", icon: Megaphone },
   { to: "calendar", label: "Calendar", icon: CalendarBlank },
+  { to: "ready", label: "Ready to post", icon: PaperPlaneTilt, badge: "ready" },
   { to: "inbox", label: "Inbox", icon: ChatsCircle },
   { to: "analytics", label: "Analytics", icon: ChartLineUp },
   { to: "website", label: "Website", icon: Globe },
@@ -192,6 +194,12 @@ export function AppShell() {
     enabled: !!projectId,
     refetchInterval: 60_000,
   });
+  const { data: ready } = useQuery({
+    queryKey: ["ready", projectId],
+    queryFn: () => api.get<{ counts: { due: number; upcoming: number } }>(`/projects/${projectId}/ready`),
+    enabled: !!projectId,
+    refetchInterval: 60_000,
+  });
   const logout = async () => {
     await api.post("/auth/logout");
     qc.clear();
@@ -217,6 +225,7 @@ export function AppShell() {
                 <item.icon size={16} weight="bold" className="opacity-80" />
                 <span className="flex-1">{item.label}</span>
                 {item.badge === "approvals" && !!approvals?.approvals.length && <Badge tone="yellow">{approvals.approvals.length}</Badge>}
+                {item.badge === "ready" && !!ready?.counts.due && <Badge tone="yellow">{ready.counts.due}</Badge>}
               </NavLink>
             ))}
           </div>

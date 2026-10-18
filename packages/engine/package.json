@@ -9,20 +9,21 @@
     "typecheck": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@socialpilot/core": "workspace:*",
-    "@socialpilot/shared": "workspace:*",
-    "@socialpilot/db": "workspace:*",
     "@socialpilot/ai": "workspace:*",
-    "@socialpilot/social": "workspace:*",
+    "@socialpilot/core": "workspace:*",
+    "@socialpilot/db": "workspace:*",
     "@socialpilot/integrations": "workspace:*",
+    "@socialpilot/shared": "workspace:*",
+    "@socialpilot/social": "workspace:*",
     "bullmq": "5.81.5",
-    "ioredis": "5.11.1",
+    "cheerio": "^1.1.2",
     "cron-parser": "4.9.0",
     "diff": "^8.0.2",
-    "sharp": "0.34.5",
+    "fflate": "0.8.2",
+    "ioredis": "5.11.1",
     "pg": "^8.16.3",
-    "zod": "^3.25.76",
-    "cheerio": "^1.1.2"
+    "sharp": "0.34.5",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
     "@types/pg": "^8.15.5"

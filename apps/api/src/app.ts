@@ -17,6 +17,7 @@ import projectRoutes from "./routes/projects";
 import integrationRoutes from "./routes/integrations";
 import mediaRoutes from "./routes/media";
 import contentRoutes from "./routes/content";
+import readyRoutes from "./routes/ready";
 import engagementRoutes from "./routes/engagement";
 import operationsRoutes from "./routes/operations";
 import eventRoutes from "./routes/events";
@@ -74,6 +75,7 @@ export async function buildApp(opts: { logger?: boolean } = {}) {
       await api.register(integrationRoutes);
       await api.register(mediaRoutes);
       await api.register(contentRoutes);
+      await api.register(readyRoutes);
       await api.register(engagementRoutes);
       await api.register(operationsRoutes);
       await api.register(eventRoutes);

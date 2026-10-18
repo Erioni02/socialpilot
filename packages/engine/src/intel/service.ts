@@ -367,3 +367,41 @@ export async function runTrafficReportJob(payload: { reportId: string }) {
     throw e;
   }
 }
+
+// ───────────── Tracking for manually published posts ─────────────
+
+/** Free snapshot of one URL linked to a project (no search-history entry, not added to the watchlist). */
+export async function snapshotUrl(userId: string, projectId: string | null, url: string) {
+  const { parsed, outcome } = await analyzeSocialUrl(url, { bypassCache: true });
+  if ((outcome.status === "ok" || outcome.status === "partial") && outcome.result) {
+    const { entity, snapshot } = await persist(userId, projectId, outcome);
+    return { entityId: entity.id, outcome, snapshot };
+  }
+  let entityId: string | null = null;
+  if (parsed) {
+    const e = await prisma.intelEntity.upsert({
+      where: { userId_platform_kind_externalId: { userId, platform: parsed.platform, kind: parsed.kind, externalId: parsed.externalId.toLowerCase() } },
+      update: { lastStatus: outcome.status, lastError: outcome.message?.slice(0, 500) ?? null, lastFetchedAt: new Date(), ...(projectId ? { projectId } : {}) },
+      create: { userId, projectId, platform: parsed.platform, kind: parsed.kind, externalId: parsed.externalId.toLowerCase(), url: parsed.url, handle: parsed.handle, lastStatus: outcome.status, lastError: outcome.message?.slice(0, 500) ?? null, lastFetchedAt: new Date() },
+    });
+    entityId = e.id;
+  }
+  return { entityId, outcome, snapshot: null };
+}
+
+/** Metrics the owner entered or confirmed (e.g. read from an Insights screenshot). Stored as a snapshot with its source. */
+export async function recordOwnerMetrics(userId: string, entityId: string, metrics: Metrics, source: "manual" | "screenshot", note?: string) {
+  const entity = await prisma.intelEntity.findFirst({ where: { id: entityId, userId } });
+  if (!entity) throw notFound("Tracked post");
+  const clean: Metrics = {};
+  for (const [k, v] of Object.entries(metrics)) if (v && Number.isFinite(v.value) && v.value >= 0) clean[k as MetricKey] = { value: Math.round(v.value) };
+  if (!Object.keys(clean).length) throw badRequest("Enter at least one metric");
+  const snapshot = await saveSnapshot(entity.id, {
+    source: source === "manual" ? "Entered by you" : "Read from your Insights screenshot (confirmed by you)",
+    confidence: "exact",
+    metrics: clean,
+    unavailable: note ? [{ metric: "note", reason: note.slice(0, 300) }] : [],
+  });
+  await prisma.intelEntity.update({ where: { id: entity.id }, data: { lastFetchedAt: new Date(), lastStatus: "ok", lastError: null } });
+  return snapshot;
+}

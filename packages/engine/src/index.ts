@@ -29,4 +29,5 @@ export * from "./scheduler";
 export * from "./jobs";
 export * from "./intel/service";
 export * from "./intel/pulse";
+export * from "./content/manual";
 export * from "./agents/skills";

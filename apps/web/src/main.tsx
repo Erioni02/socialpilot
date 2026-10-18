@@ -21,6 +21,7 @@ import PostEditor from "@/pages/project/PostEditor";
 import Campaigns from "@/pages/project/Campaigns";
 import CampaignDetail from "@/pages/project/CampaignDetail";
 import CalendarPage from "@/pages/project/Calendar";
+import ReadyToPost from "@/pages/project/ReadyToPost";
 import InboxPage from "@/pages/project/Inbox";
 import AnalyticsPage from "@/pages/project/Analytics";
 import WebsitePage from "@/pages/project/Website";
@@ -75,6 +76,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
               <Route path="campaigns" element={<Campaigns />} />
               <Route path="campaigns/:campaignId" element={<CampaignDetail />} />
               <Route path="calendar" element={<CalendarPage />} />
+              <Route path="ready" element={<ReadyToPost />} />
               <Route path="inbox" element={<InboxPage />} />
               <Route path="analytics" element={<AnalyticsPage />} />
               <Route path="website" element={<WebsitePage />} />

@@ -27,6 +27,7 @@ import { applyImageOp, applyVideoOp, createAsset, generateImages, generateVideo,
 import { draftReply, feedbackSummary, sendReply } from "../inbox/service";
 import { generateOpportunities, listDiscoverItems, refreshDiscover } from "../discover/service";
 import { listPulse } from "../intel/pulse";
+import { postedPerformance, readyToPost } from "../content/manual";
 import { getSkill, SKILLS } from "./skills";
 import { listDeployments, listRepoFiles, proposeCodeChange, readRepoFile, requestMerge, requestPromotion, submitCodeChange } from "../website/code";
 import { runWebsiteAudit } from "../website/audit";
@@ -270,6 +271,35 @@ export const TOOLS: AgentTool[] = [
       const r = await listPulse(ctx.userId, { platform: args.platform, hours: args.hours, projectId: ctx.project.id, limit: 200 });
       const items = (args.relevantOnly ? r.items.filter((i) => i.matched.length) : r.items).slice(0, args.limit);
       return { lastCrawlAt: r.lastCrawlAt, items: items.map((i) => ({ itemId: i.id, platform: i.platform, kind: i.kind, title: i.title, summary: i.summary.slice(0, 280), url: i.url, author: i.author, signal: i.score, matchedKeywords: i.matched, firstSeenAt: i.firstSeenAt })) };
+    },
+  },
+  {
+    name: "get_post_performance",
+    description: "Measured performance of everything this project published (including posts the owner published manually and linked): views, likes, comments, shares, saves, engagement rate, growth snapshots, best posting times. Missing values are null — never treat them as zero.",
+    permission: null,
+    schema: z.object({ days: z.number().int().min(1).max(365).default(30), platform: z.enum(["all", "instagram", "tiktok", "x"]).default("all") }),
+    jsonSchema: obj({ days: num("Lookback days"), platform: { type: "string", enum: ["all", "instagram", "tiktok", "x"] } }),
+    async run(args, ctx) {
+      const r = await postedPerformance(ctx.project, args.days);
+      const posts = r.posts.filter((p) => args.platform === "all" || p.platform === args.platform);
+      return {
+        totals: r.totals,
+        platforms: r.platforms,
+        timing: r.timing,
+        posts: posts.slice(0, 50).map((p) => ({ platform: p.platform, title: p.title, url: p.url, publishedAt: p.publishedAt, metrics: p.metrics, engagementRate: p.engagementRate, dataSource: p.source, tracking: p.tracking, snapshots: p.series.length })),
+        coverage: r.coverage,
+      };
+    },
+  },
+  {
+    name: "list_ready_to_post",
+    description: "Posts waiting on the owner's manual publishing desk (Ready to post), with due times and platforms.",
+    permission: null,
+    schema: z.object({}),
+    jsonSchema: obj({}),
+    async run(_args, ctx) {
+      const r = await readyToPost(ctx.project);
+      return { counts: r.counts, items: r.items.map((i) => ({ postId: i.postId, platform: i.platform, title: i.title, dueAt: i.dueAt, state: i.state, media: i.media.length })) };
     },
   },
   {
