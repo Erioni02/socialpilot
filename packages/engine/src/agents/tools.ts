@@ -29,6 +29,7 @@ import { generateOpportunities, listDiscoverItems, refreshDiscover } from "../di
 import { listDeployments, listRepoFiles, proposeCodeChange, readRepoFile, requestMerge, requestPromotion, submitCodeChange } from "../website/code";
 import { runWebsiteAudit } from "../website/audit";
 import { analyzeMedia } from "../media/vision";
+import { listFiles, moveFile, readFile, trashFile, writeFile } from "../media/files";
 import { notify } from "../infra/audit";
 import { emit } from "../infra/events";
 
@@ -577,6 +578,79 @@ export const TOOLS: AgentTool[] = [
       await ownedAsset(ctx.project.id, args.assetId);
       const r = await applyImageOp({ userId: ctx.userId, projectId: ctx.project.id, taskId: ctx.task.id, project: ctx.project, createdBy: `agent:${ctx.actor.agentType}` }, args.assetId, args.operation);
       return { newVersions: r.versions.map((v) => ({ versionId: v.id, version: v.version, width: v.width, height: v.height })), createdAssets: (r.createdAssets ?? []).map(assetView) };
+    },
+  },
+  // ───── The AI's own workspace (/workspace) ─────
+  {
+    name: "list_files",
+    description: "List text files in your persistent project workspace (default /workspace). Use it to find your notes, plans, drafts and journal from earlier tasks.",
+    permission: null,
+    schema: z.object({ prefix: z.string().max(300).default("/workspace") }),
+    jsonSchema: obj({ prefix: str("Folder, e.g. /workspace or /workspace/drafts") }),
+    async run(args, ctx) {
+      return listFiles(ctx.project.id, args.prefix);
+    },
+  },
+  {
+    name: "read_file",
+    description: "Read a text file from the workspace (or any text document asset by path).",
+    permission: null,
+    schema: z.object({ path: z.string().max(300) }),
+    jsonSchema: obj({ path: str("e.g. /workspace/plan.md") }, ["path"]),
+    async run(args, ctx) {
+      const f = await readFile(ctx.project.id, args.path);
+      return { ...f, content: f.content.slice(0, 60000), truncated: f.content.length > 60000 };
+    },
+  },
+  {
+    name: "write_file",
+    description:
+      "Create or update a text file in your workspace (markdown, txt, json, csv, html drafts, scripts, briefs). Every write is saved as a new version the owner can see and restore. Use mode=append for logs/journals.",
+    permission: "createContent",
+    schema: z.object({ path: z.string().max(300), content: z.string().max(2_000_000), mode: z.enum(["overwrite", "append"]).default("overwrite") }),
+    jsonSchema: obj({ path: str("Relative paths go under /workspace, e.g. drafts/launch-thread.md"), content: str("Full file content (or text to append)"), mode: { type: "string", enum: ["overwrite", "append"] } }, ["path", "content"]),
+    async run(args, ctx) {
+      return writeFile(ctx.project, args.path, args.content, `agent:${ctx.actor.agentType}`, args.mode);
+    },
+  },
+  {
+    name: "move_file",
+    description: "Rename or move a workspace file.",
+    permission: "createContent",
+    schema: z.object({ from: z.string().max(300), to: z.string().max(300) }),
+    jsonSchema: obj({ from: str("Current path"), to: str("New path") }, ["from", "to"]),
+    async run(args, ctx) {
+      return moveFile(ctx.project.id, args.from, args.to);
+    },
+  },
+  {
+    name: "delete_file",
+    description: "Move a workspace file to /trash (recoverable; versions are kept).",
+    permission: "createContent",
+    schema: z.object({ path: z.string().max(300) }),
+    jsonSchema: obj({ path: str("File path") }, ["path"]),
+    async run(args, ctx) {
+      return trashFile(ctx.project.id, args.path);
+    },
+  },
+  {
+    name: "schedule_followup_task",
+    description:
+      "Schedule another autonomous task for yourself later (e.g. 'check how yesterday's posts performed and adjust'). Limited to 5 pending follow-ups per project; all normal permissions, budgets and approvals still apply.",
+    permission: "createContent",
+    schema: z.object({ instruction: z.string().min(10).max(4000), runInHours: z.number().min(0.25).max(24 * 14), agentType: z.string().max(40).default("general") }),
+    jsonSchema: obj({ instruction: str("What the future task should do (include context; write details to a workspace file and reference it)"), runInHours: num("Delay in hours (0.25 to 336)"), agentType: str("Agent role, default general") }, ["instruction", "runInHours"]),
+    async run(args, ctx) {
+      const pending = await prisma.task.count({ where: { projectId: ctx.project.id, status: "queued", createdBy: { startsWith: "agent:" } } });
+      if (pending >= 5) throw badRequest("There are already 5 pending follow-up tasks for this project.");
+      const { createTask } = await import("./runner");
+      const t = await createTask(
+        ctx.project,
+        { instruction: args.instruction, agentType: args.agentType as any, autonomous: true, context: { scheduledBy: ctx.task.id } },
+        `agent:${ctx.actor.agentType}`,
+        { runAt: new Date(Date.now() + args.runInHours * 3600_000) },
+      );
+      return { taskId: t.id, runsAt: new Date(Date.now() + args.runInHours * 3600_000).toISOString() };
     },
   },
   {

@@ -182,11 +182,11 @@ export default function Workspace() {
         {/* ─────────── Left: library ─────────── */}
         <aside className="border-b md:border-b-0 md:border-r border-line bg-subtle min-h-0 flex flex-col">
           <div className="p-3 space-y-2 border-b border-line">
-            <div className="flex gap-1.5">
+            <div className="grid grid-cols-3 gap-1.5">
               <Button
                 variant="primary"
                 size="sm"
-                className="flex-1"
+                className="col-span-3"
                 onClick={() => {
                   setGenTab("image");
                   setGenOpen(true);
@@ -194,8 +194,25 @@ export default function Workspace() {
               >
                 <Sparkle size={13} weight="fill" /> Generate
               </Button>
-              <Button variant="secondary" size="sm" className="flex-1" loading={uploading > 0} onClick={() => fileRef.current?.click()}>
+              <Button variant="secondary" size="sm" className="col-span-2" loading={uploading > 0} onClick={() => fileRef.current?.click()}>
                 <UploadSimple size={13} /> Upload
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                title="New text file in the shared AI workspace"
+                onClick={async () => {
+                  const name = window.prompt("New file name (saved under /workspace)", "notes.md");
+                  if (!name) return;
+                  try {
+                    const r = await api.put<{ assetId: string }>(p(projectId, "/files"), { path: name, content: "" });
+                    setParam("asset", r.assetId);
+                  } catch (e) {
+                    toastError(e);
+                  }
+                }}
+              >
+                + File
               </Button>
               <input ref={fileRef} type="file" multiple hidden accept="image/png,image/jpeg,image/webp,image/gif,video/mp4,video/quicktime,video/webm,audio/mpeg,audio/wav,.txt,.md,.json,.srt" onChange={(e) => void upload(e.target.files)} />
             </div>

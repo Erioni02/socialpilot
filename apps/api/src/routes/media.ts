@@ -17,7 +17,9 @@ import {
   restoreVersion,
   sniffMime,
   streamObject,
-  verifyPublicUrl,
+  listFiles,
+  writeFile,
+  writeAssetText,
 } from "@socialpilot/engine";
 import { parse, userOf } from "../lib/http";
 
@@ -29,6 +31,21 @@ async function lockAsset(assetId: string) {
 
 export default async function mediaRoutes(app: FastifyInstance) {
   const P = { preHandler: app.requireProject };
+
+  // ───── Workspace text files (shared by the AI and the user) ─────
+  app.get("/projects/:projectId/files", P, async (req) => {
+    const { prefix } = parse(z.object({ prefix: z.string().max(300).default("/workspace") }), req.query);
+    return { files: await listFiles(req.project.id, prefix) };
+  });
+  app.put("/projects/:projectId/files", P, async (req) => {
+    const body = parse(z.object({ path: z.string().min(1).max(300), content: z.string().max(2_000_000) }), req.body);
+    return writeFile(req.project, body.path, body.content, "user");
+  });
+  app.post("/projects/:projectId/assets/:assetId/text", P, async (req) => {
+    const { assetId } = req.params as { assetId: string };
+    const { content } = parse(z.object({ content: z.string().max(2_000_000) }), req.body);
+    return writeAssetText(req.project, assetId, content, "user");
+  });
 
   async function owned(projectId: string, assetId: string) {
     const a = await prisma.asset.findFirst({ where: { id: assetId, projectId } });

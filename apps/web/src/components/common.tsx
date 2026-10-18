@@ -5,7 +5,7 @@ import { useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { api, p } from "@/lib/api";
 import { cn, toastError } from "@/lib/utils";
-import { Button, Select, Textarea, Badge, Tooltip } from "@/components/ui";
+import { Button, Select, Textarea, Badge, Tooltip, Switch } from "@/components/ui";
 
 export function PlatformIcon({ platform, size = 16, className }: { platform: string; size?: number; className?: string }) {
   const props = { size, className, weight: "fill" as const };
@@ -106,10 +106,11 @@ export function CommandBar({
 }) {
   const [text, setText] = React.useState("");
   const [agent, setAgent] = React.useState(defaultAgent);
+  const [autonomous, setAutonomous] = React.useState(false);
   const navigate = useNavigate();
   const qc = useQueryClient();
   const create = useMutation({
-    mutationFn: () => api.post<{ task: { id: string } }>(p(projectId, "/tasks"), { instruction: text, agentType: agent, attachmentAssetIds: attachments.map((a) => a.id) }),
+    mutationFn: () => api.post<{ task: { id: string } }>(p(projectId, "/tasks"), { instruction: text, agentType: agent, attachmentAssetIds: attachments.map((a) => a.id), autonomous }),
     onSuccess: (r) => {
       setText("");
       qc.invalidateQueries({ queryKey: ["tasks"] });
@@ -162,6 +163,11 @@ export function CommandBar({
           </div>
         )}
         <div className="flex-1" />
+        <Tooltip content="Autonomous: works longer on its own, keeps notes in /workspace and can schedule follow-up tasks. Permissions, budgets and approvals still apply.">
+          <span>
+            <Switch checked={autonomous} onCheckedChange={setAutonomous} label={<span className="text-[12px] text-muted">Autonomous</span>} />
+          </span>
+        </Tooltip>
         <span className="text-[11px] text-faint hidden sm:inline">
           <kbd>Ctrl</kbd> <kbd>Enter</kbd>
         </span>

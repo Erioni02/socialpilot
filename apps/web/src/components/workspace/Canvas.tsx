@@ -1,8 +1,9 @@
 import * as React from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { Crop, FileText, MusicNote, Scissors, Warning } from "@phosphor-icons/react";
-import { assetUrl } from "@/lib/api";
-import { cn } from "@/lib/utils";
+import { api, assetUrl, p } from "@/lib/api";
+import { cn, toastError } from "@/lib/utils";
 import { Button, Select, Skeleton, Spinner } from "@/components/ui";
 import type { Asset, AssetVersion } from "@/components/content/shared";
 
@@ -228,7 +229,20 @@ export function VideoTimeline({
   );
 }
 
-export function DocumentPreview({ src }: { src: string }) {
+export function DocumentPreview({ src, projectId, assetId }: { src: string; projectId?: string; assetId?: string }) {
+  const qc = useQueryClient();
+  const [draft, setDraft] = React.useState<string | null>(null);
+  const save = useMutation({
+    mutationFn: () => api.post(p(projectId!, `/assets/${assetId}/text`), { content: draft ?? "" }),
+    onSuccess: () => {
+      toast.success("Saved as a new version");
+      setDraft(null);
+      qc.invalidateQueries({ queryKey: ["asset"] });
+      qc.invalidateQueries({ queryKey: ["assets"] });
+    },
+    onError: (e) => toastError(e),
+  });
+  const editable = !!projectId && !!assetId;
   const { data, isLoading, error } = useQuery({
     queryKey: ["asset", "text", src],
     queryFn: async () => {
@@ -241,8 +255,41 @@ export function DocumentPreview({ src }: { src: string }) {
   if (isLoading) return <Skeleton className="m-6 h-64" />;
   if (error) return <p className="p-6 text-[13px] text-red-fg">{(error as Error).message}</p>;
   const text = data ?? "";
+  if (draft !== null)
+    return (
+      <div className="h-full flex flex-col p-6 gap-3">
+        <div className="mx-auto w-full max-w-3xl flex items-center justify-end gap-2">
+          <Button size="sm" variant="ghost" onClick={() => setDraft(null)}>
+            Cancel
+          </Button>
+          <Button size="sm" variant="primary" loading={save.isPending} onClick={() => save.mutate()}>
+            Save version
+          </Button>
+        </div>
+        <textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if ((e.ctrlKey || e.metaKey) && e.key === "s") {
+              e.preventDefault();
+              save.mutate();
+            }
+          }}
+          spellCheck={false}
+          className="mx-auto w-full max-w-3xl flex-1 min-h-[300px] font-mono text-[12.5px] leading-relaxed text-ink bg-surface border border-line rounded-lg p-5 focus:outline-none focus:border-ink/40 resize-none"
+          aria-label="File contents"
+        />
+      </div>
+    );
   return (
     <div className="h-full overflow-auto scrollbar-thin p-6">
+      {editable && (
+        <div className="mx-auto max-w-3xl flex justify-end mb-2">
+          <Button size="sm" onClick={() => setDraft(text)}>
+            Edit
+          </Button>
+        </div>
+      )}
       <pre className="mx-auto max-w-3xl whitespace-pre-wrap break-words font-mono text-[12.5px] leading-relaxed text-ink-2 bg-surface border border-line rounded-lg p-5">
         {text.length > 200_000 ? `${text.slice(0, 200_000)}\n\n… truncated` : text || "(empty file)"}
       </pre>
@@ -348,7 +395,7 @@ export function AssetStage({ projectId, asset, children }: { projectId: string; 
         <audio src={src} controls />
       </div>
     );
-  if (asset.kind === "document") return <DocumentPreview src={src} />;
+  if (asset.kind === "document") return <DocumentPreview src={src} projectId={projectId} assetId={asset.id} />;
   return (
     <div className="h-full flex flex-col items-center justify-center gap-2 text-muted">
       <FileText size={30} />

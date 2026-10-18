@@ -11,6 +11,7 @@ export * from "./analytics/service";
 export * from "./media/service";
 export * as ffmpeg from "./media/ffmpeg";
 export * from "./media/vision";
+export * from "./media/files";
 export * from "./content/service";
 export * from "./content/publishing";
 export * from "./content/campaigns";

@@ -131,6 +131,8 @@ export const taskCreateSchema = z.object({
   instruction: z.string().trim().min(3).max(8000),
   agentType: z.enum(AGENT_TYPES).default("general"),
   attachmentAssetIds: z.array(z.string()).max(10).default([]),
+  /** Long-running mode: more steps, works in its own /workspace and may schedule follow-up tasks. */
+  autonomous: z.boolean().default(false),
   model: z.string().max(120).optional(),
   context: z.record(z.string(), z.unknown()).optional(),
 });
