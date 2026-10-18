@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { analyzeSocialUrl, parseSocialUrl, xSyndication, tiktokPublicPage, apifyInstagram } from "../src";
+import { analyzeSocialUrl, parseSocialUrl, xSyndication, tiktokPublicPage, apifyInstagram, socialcrawlTiktok, socialcrawlInstagram, postpeerX } from "../src";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -71,8 +71,8 @@ describe("paid providers are opt-in", () => {
     });
     const r = await analyzeSocialUrl("https://www.instagram.com/natgeo/");
     expect(r.outcome.status).toBe("unavailable");
-    expect(r.outcome.paidOptions?.[0].provider).toBe("apify-instagram");
-    expect(calls.some((c) => c.includes("apify.com"))).toBe(false);
+    expect(r.outcome.paidOptions?.map((p) => p.provider)).toEqual(["socialcrawl-instagram", "apify-instagram"]);
+    expect(calls.some((c) => /apify.com|socialcrawl|postpeer/.test(c))).toBe(false);
   });
   it("passes the spend cap to Apify and maps profile data", async () => {
     let url = "";
@@ -84,5 +84,63 @@ describe("paid providers are opt-in", () => {
     expect(url).toContain("maxTotalChargeUsd=0.07");
     expect(r.result!.metrics.followers).toEqual({ value: 280000000 });
     expect(r.result!.posts![0].metrics.likes).toBeUndefined(); // hidden likes (-1) are not shown as a number
+  });
+});
+
+const jsonRes = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
+
+describe("SocialCrawl (credits, opt-in)", () => {
+  it("maps a TikTok profile plus recent videos and sends the key header", async () => {
+    const calls: { url: string; key?: string }[] = [];
+    vi.stubGlobal("fetch", async (u: string, init: RequestInit = {}) => {
+      calls.push({ url: String(u), key: (init.headers as Record<string, string>)["x-api-key"] });
+      if (String(u).includes("/profile/videos"))
+        return jsonRes({ success: true, data: { items: [{ post: { id: "7", url: "https://www.tiktok.com/@a/video/7", content: { text: "hi" }, engagement: { views: 100, likes: 10, comments: 2, shares: 1, saves: null }, published_at: "2026-10-01T00:00:00Z" } }] }, credits_used: 1, credits_remaining: 97 });
+      return jsonRes({ success: true, data: { author: { username: "a", display_name: "A", followers: 9000000, following: 3, posts_count: 50, likes_count: 1000, private: false, ext: { followers_approximate: true } } }, credits_used: 1, credits_remaining: 98 });
+    });
+    const r = await socialcrawlTiktok.fetch(parseSocialUrl("tiktok.com/@a"), { socialcrawlKey: "sc_test" });
+    expect(calls[0].url).toBe("https://www.socialcrawl.dev/v1/tiktok/profile?handle=a");
+    expect(calls[0].key).toBe("sc_test");
+    expect(r.status).toBe("ok");
+    expect(r.result!.metrics.followers).toEqual({ value: 9000000, approx: true });
+    expect(r.result!.confidence).toBe("rounded");
+    expect(r.result!.credits).toBe(2);
+    expect(r.result!.posts![0].metrics).toEqual({ views: { value: 100 }, likes: { value: 10 }, comments: { value: 2 }, shares: { value: 1 } });
+  });
+
+  it("reports private accounts from SocialCrawl's 404 reason", async () => {
+    vi.stubGlobal("fetch", async () => jsonRes({ success: false, error: { type: "RESOURCE_NOT_FOUND", message: "nope", status: 404, details: { reason: "account_private" } } }, 404));
+    const r = await socialcrawlInstagram.fetch(parseSocialUrl("instagram.com/someone"), { socialcrawlKey: "sc_test" });
+    expect(r.status).toBe("private");
+  });
+
+  it("refuses to run without a key", async () => {
+    const r = await socialcrawlInstagram.fetch(parseSocialUrl("instagram.com/p/C1ySEcgOvIC"), {});
+    expect(r.status).toBe("error");
+  });
+});
+
+describe("PostPeer X analytics (credits, opt-in)", () => {
+  it("reads post analytics through the connected account", async () => {
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", async (u: string) => {
+      urls.push(String(u));
+      if (String(u).includes("/connect/integrations")) return jsonRes({ success: true, integrations: [{ id: "acc1", platform: "twitter", displayName: "@jack" }] });
+      return jsonRes({ success: true, post: { aggregated: { impressions: 22, likes: 1, comments: 1, shares: null }, platforms: [{ platform: "twitter", platformPostId: "20", metrics: {} }] } });
+    });
+    const r = await postpeerX.fetch(parseSocialUrl("https://x.com/jack/status/20"), { postpeerKey: "k" });
+    expect(urls[1]).toBe("https://api.postpeer.dev/v1/analytics?postId=20&platform=twitter&accountId=acc1");
+    expect(r.result!.metrics).toEqual({ views: { value: 22 }, likes: { value: 1 }, comments: { value: 1 } });
+  });
+
+  it("explains when no X account is connected (and spends nothing)", async () => {
+    const urls: string[] = [];
+    vi.stubGlobal("fetch", async (u: string) => {
+      urls.push(String(u));
+      return jsonRes({ success: true, integrations: [] });
+    });
+    const r = await postpeerX.fetch(parseSocialUrl("x.com/jack"), { postpeerKey: "k" });
+    expect(r.status).toBe("unavailable");
+    expect(urls.every((u) => !u.includes("/analytics"))).toBe(true);
   });
 });

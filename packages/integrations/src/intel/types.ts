@@ -54,6 +54,8 @@ export interface IntelResult {
   sourceLabel: string;
   confidence: "exact" | "rounded" | "partial";
   costUsd?: number;
+  /** Credits used on a credit-based source (SocialCrawl, PostPeer). */
+  credits?: number;
 }
 
 export type IntelStatus = "ok" | "partial" | "unavailable" | "private" | "not_found" | "rate_limited" | "error";
@@ -63,7 +65,21 @@ export interface IntelOutcome {
   result?: IntelResult;
   message?: string;
   /** Paid, opt-in sources that could retrieve this (never run without explicit approval). */
-  paidOptions?: { provider: string; label: string; estimatedCostUsd: number; note: string }[];
+  paidOptions?: PaidOption[];
+}
+
+export type PaidSourceKey = "apify" | "socialcrawl" | "postpeer";
+
+export interface PaidOption {
+  provider: string;
+  label: string;
+  /** Which stored key this source needs. */
+  requires: PaidSourceKey;
+  /** Apify sources bill in USD … */
+  estimatedCostUsd?: number;
+  /** … SocialCrawl / PostPeer bill in credits. */
+  estimatedCredits?: number;
+  note: string;
 }
 
 export interface IntelProvider {
@@ -71,5 +87,5 @@ export interface IntelProvider {
   label: string;
   paid: boolean;
   supports(u: ParsedSocialUrl): boolean;
-  fetch(u: ParsedSocialUrl, opts: { apifyToken?: string; maxChargeUsd?: number }): Promise<IntelOutcome>;
+  fetch(u: ParsedSocialUrl, opts: { apifyToken?: string; socialcrawlKey?: string; postpeerKey?: string; maxChargeUsd?: number }): Promise<IntelOutcome>;
 }

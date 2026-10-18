@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "@socialpilot/db";
 import { badRequest, config, redactString } from "@socialpilot/core";
+import { postpeerAccounts, postpeerBalance, socialcrawlBalance } from "@socialpilot/integrations";
 import { listNvidiaModels, listOllamaModels, ollamaRoot, testProvider } from "@socialpilot/ai";
 import { AI_PROVIDER_CATALOG, AGENT_LABELS, AUTONOMY_LABELS, CAPABILITY_REGISTRY, DATA_PROVIDER_CATALOG, INTEGRATION_CATALOG, PERMISSION_LABELS, providerCredentialSchema } from "@socialpilot/shared";
 import { audit, credentialStatus, getProviderCreds, validateBaseUrl, fetchCustomModels, listProviderSettings, saveProviderSettings, ffmpeg, getCustomProvider, listCustomProviders, resolveSecret, saveCredential, saveCustomProvider } from "@socialpilot/engine";
@@ -139,7 +140,12 @@ export default async function systemRoutes(app: FastifyInstance) {
         if (provider === "ollama") await validateBaseUrl(ollamaRoot(secret.baseUrl));
         message = await testProvider(provider, { apiKey: secret.apiKey ?? "", accountId: secret.accountId, baseUrl: secret.baseUrl });
       }
-      else if (provider === "newsapi") {
+      else if (provider === "socialcrawl") {
+        message = `Connected — ${await socialcrawlBalance(secret.apiKey!)} credits left`;
+      } else if (provider === "postpeer") {
+        const [credits, accounts] = await Promise.all([postpeerBalance(secret.apiKey!), postpeerAccounts(secret.apiKey!)]);
+        message = `Connected — ${credits} credits left, ${accounts.length ? `X: ${accounts.map((x) => x.displayName).join(", ")}` : "no X account connected yet (connect it in Social Intel)"}`;
+      } else if (provider === "newsapi") {
         const r = await fetch("https://newsapi.org/v2/top-headlines?category=technology&pageSize=1&language=en", { headers: { "x-api-key": secret.apiKey! } });
         const j: any = await r.json();
         if (!r.ok) throw new Error(j.message ?? `HTTP ${r.status}`);

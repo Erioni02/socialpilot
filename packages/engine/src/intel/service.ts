@@ -2,6 +2,10 @@ import { prisma, Prisma, type IntelEntity } from "@socialpilot/db";
 import { badRequest, createLogger, notFound, redactString } from "@socialpilot/core";
 import {
   analyzeSocialUrl,
+  postpeerAccounts,
+  postpeerBalance,
+  postpeerConnectUrl,
+  socialcrawlBalance,
   normalizeDomain,
   runTrafficOverview,
   TRAFFIC_EST_COST_PER_DOMAIN,
@@ -77,22 +81,63 @@ async function persist(userId: string, projectId: string | null, outcome: IntelO
 export interface AnalyzeInput {
   url: string;
   projectId?: string | null;
-  /** Paid provider id (apify-instagram | apify-tiktok). Requires confirmPaid === true. */
+  /** Paid provider id (socialcrawl-* | postpeer-x | apify-*). Requires confirmPaid === true. */
   paidProvider?: string;
   confirmPaid?: boolean;
   maxChargeUsd?: number;
 }
 
+const PAID_KEY: Record<string, { key: "apify" | "socialcrawl" | "postpeer"; name: string }> = {
+  "apify-instagram": { key: "apify", name: "Apify API token" },
+  "apify-tiktok": { key: "apify", name: "Apify API token" },
+  "socialcrawl-tiktok": { key: "socialcrawl", name: "SocialCrawl API key" },
+  "socialcrawl-instagram": { key: "socialcrawl", name: "SocialCrawl API key" },
+  "postpeer-x": { key: "postpeer", name: "PostPeer API key" },
+};
+
+/** Which paid data sources the user has keys for (keys never leave the server). */
+export async function paidSourceStatus(userId: string) {
+  const [apify, socialcrawl, postpeer] = await Promise.all([getApiKey(userId, "apify"), getApiKey(userId, "socialcrawl"), getApiKey(userId, "postpeer")]);
+  return { apify: !!apify, socialcrawl: !!socialcrawl, postpeer: !!postpeer };
+}
+
+/** Free balance lookups so the confirmation dialog can show remaining credits. */
+export async function paidSourceBalance(userId: string, source: "socialcrawl" | "postpeer") {
+  const key = await getApiKey(userId, source);
+  if (!key) throw badRequest(`Add your ${source === "socialcrawl" ? "SocialCrawl" : "PostPeer"} API key in Settings → Data sources first.`);
+  return source === "socialcrawl" ? socialcrawlBalance(key) : postpeerBalance(key);
+}
+
+export async function postpeerXAccounts(userId: string) {
+  const key = await getApiKey(userId, "postpeer");
+  if (!key) return { configured: false, accounts: [] };
+  return { configured: true, accounts: await postpeerAccounts(key) };
+}
+
+export async function postpeerXConnect(userId: string, redirectUri?: string) {
+  const key = await getApiKey(userId, "postpeer");
+  if (!key) throw badRequest("Add your PostPeer API key in Settings → Data sources first.");
+  return { url: await postpeerConnectUrl(key, redirectUri) };
+}
+
 export async function analyzeIntelUrl(userId: string, input: AnalyzeInput) {
   let apifyToken: string | undefined;
+  let socialcrawlKey: string | undefined;
+  let postpeerKey: string | undefined;
   let maxChargeUsd: number | undefined;
   if (input.paidProvider) {
     if (input.confirmPaid !== true) throw badRequest("Paid sources need explicit confirmation for each request.");
-    apifyToken = (await getApiKey(userId, "apify")) ?? undefined;
-    if (!apifyToken) throw badRequest("Add your Apify API token in Settings → Data sources to use paid sources.");
-    maxChargeUsd = Math.min(Math.max(input.maxChargeUsd ?? 0.1, 0.01), MAX_PAID_CHARGE_USD);
+    const need = PAID_KEY[input.paidProvider];
+    if (!need) throw badRequest("Unknown paid source.");
+    const key = (await getApiKey(userId, need.key)) ?? undefined;
+    if (!key) throw badRequest(`Add your ${need.name} in Settings → Data sources to use this source.`);
+    if (need.key === "apify") {
+      apifyToken = key;
+      maxChargeUsd = Math.min(Math.max(input.maxChargeUsd ?? 0.1, 0.01), MAX_PAID_CHARGE_USD);
+    } else if (need.key === "socialcrawl") socialcrawlKey = key;
+    else postpeerKey = key;
   }
-  const { parsed, outcome } = await analyzeSocialUrl(input.url, { paidProvider: input.paidProvider, apifyToken, maxChargeUsd });
+  const { parsed, outcome } = await analyzeSocialUrl(input.url, { paidProvider: input.paidProvider, apifyToken, socialcrawlKey, postpeerKey, maxChargeUsd });
   const ok = outcome.status === "ok" || outcome.status === "partial";
   let entity: IntelEntity | null = null;
   if (ok && outcome.result) {
@@ -105,7 +150,7 @@ export async function analyzeIntelUrl(userId: string, input: AnalyzeInput) {
     data: { userId, url: input.url.slice(0, 1000), platform: parsed?.platform, kind: parsed?.kind, ok, status: outcome.status, error: ok ? null : outcome.message?.slice(0, 500), entityId: entity?.id },
   });
   if (input.paidProvider) {
-    await audit({ userId, projectId: input.projectId, actor: "user", action: "intel.paid_request", target: input.paidProvider, details: { url: input.url, maxChargeUsd, status: outcome.status } });
+    await audit({ userId, projectId: input.projectId, actor: "user", action: "intel.paid_request", target: input.paidProvider, details: { url: input.url, maxChargeUsd, credits: outcome.result?.credits, status: outcome.status } });
   }
   return { parsed, outcome, entityId: entity?.id ?? null };
 }

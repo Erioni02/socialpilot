@@ -1,8 +1,8 @@
 import type { FastifyInstance } from "fastify";
 import { z } from "zod";
 import { prisma } from "@socialpilot/db";
-import { notFound } from "@socialpilot/core";
-import { TRAFFIC_EST_COST_PER_DOMAIN } from "@socialpilot/integrations";
+import { config, notFound } from "@socialpilot/core";
+import { PAID_PROVIDER_IDS, TRAFFIC_EST_COST_PER_DOMAIN } from "@socialpilot/integrations";
 import {
   analyzeIntelUrl,
   deleteIntelEntity,
@@ -12,6 +12,10 @@ import {
   intelDashboard,
   listIntelEntities,
   MAX_PAID_CHARGE_USD,
+  paidSourceBalance,
+  paidSourceStatus,
+  postpeerXAccounts,
+  postpeerXConnect,
   setWatched,
   startTrafficReport,
 } from "@socialpilot/engine";
@@ -29,6 +33,7 @@ export default async function intelRoutes(app: FastifyInstance) {
 
   app.get("/intel/config", A, async (req) => ({
     apifyConfigured: !!(await getApiKey(userOf(req).id, "apify")),
+    sources: await paidSourceStatus(userOf(req).id),
     maxPaidChargeUsd: MAX_PAID_CHARGE_USD,
     trafficCostPerDomainUsd: TRAFFIC_EST_COST_PER_DOMAIN,
   }));
@@ -39,7 +44,7 @@ export default async function intelRoutes(app: FastifyInstance) {
       z.object({
         url: z.string().trim().min(3).max(1000),
         projectId: z.string().optional().nullable(),
-        paidProvider: z.enum(["apify-instagram", "apify-tiktok"]).optional(),
+        paidProvider: z.enum(PAID_PROVIDER_IDS).optional(),
         confirmPaid: z.boolean().optional(),
         maxChargeUsd: z.number().min(0.01).max(MAX_PAID_CHARGE_USD).optional(),
       }),
@@ -49,6 +54,18 @@ export default async function intelRoutes(app: FastifyInstance) {
     const projectId = await ownedProjectId(user.id, body.projectId);
     return analyzeIntelUrl(user.id, { ...body, projectId });
   });
+
+  /** Remaining credits on a credit-based source (free call). */
+  app.get("/intel/balance/:source", A, async (req) => {
+    const { source } = parse(z.object({ source: z.enum(["socialcrawl", "postpeer"]) }), req.params);
+    return { source, credits: await paidSourceBalance(userOf(req).id, source) };
+  });
+
+  /** X accounts connected in PostPeer (free call). */
+  app.get("/intel/postpeer/accounts", A, async (req) => postpeerXAccounts(userOf(req).id));
+
+  /** OAuth URL to connect an X account to PostPeer; PostPeer redirects back to Social Intel afterwards. */
+  app.post("/intel/postpeer/connect", A, async (req) => postpeerXConnect(userOf(req).id, `${new URL(config.APP_URL).origin}/intel?postpeer=connected`));
 
   app.get("/intel/dashboard", A, async (req) => {
     const q = parse(z.object({ platform: z.enum(["all", "tiktok", "instagram", "x"]).default("all"), watchedOnly: z.coerce.boolean().default(false) }), req.query);

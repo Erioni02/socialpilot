@@ -52,8 +52,62 @@ type Outcome = {
     sourceLabel: string;
     confidence: string;
   };
-  paidOptions?: { provider: string; label: string; estimatedCostUsd: number; note: string }[];
+  paidOptions?: PaidOption[];
 };
+type SourceKey = "apify" | "socialcrawl" | "postpeer";
+type PaidOption = { provider: string; label: string; requires: SourceKey; estimatedCostUsd?: number; estimatedCredits?: number; note: string };
+type IntelConfig = { apifyConfigured: boolean; maxPaidChargeUsd: number; sources?: Record<SourceKey, boolean> };
+const SOURCE_NAME: Record<SourceKey, string> = { apify: "Apify token", socialcrawl: "SocialCrawl key", postpeer: "PostPeer key" };
+const costLabel = (p: PaidOption) => (p.estimatedCredits != null ? `${p.estimatedCredits} credit${p.estimatedCredits === 1 ? "" : "s"}` : `≈ ${fmtUsd(p.estimatedCostUsd ?? 0)}`);
+
+/** Live credit balance for credit-based sources (free call). */
+function CreditBalance({ source }: { source: SourceKey }) {
+  const q = useQuery({ queryKey: ["intel", "balance", source], queryFn: () => api.get<{ credits: number }>(`/intel/balance/${source}`), enabled: source !== "apify", staleTime: 30_000, retry: false });
+  if (source === "apify") return null;
+  if (q.isLoading) return <span className="text-muted">checking balance…</span>;
+  if (q.error) return <span className="text-red-fg">balance unavailable</span>;
+  return <span className="text-muted">{fmtExact(q.data?.credits)} credits left</span>;
+}
+
+/** X accounts connected in PostPeer — PostPeer only reads analytics for these. */
+function PostPeerPanel() {
+  const qc = useQueryClient();
+  const [params] = useSearchParams();
+  const q = useQuery({ queryKey: ["intel", "postpeer", "accounts"], queryFn: () => api.get<{ configured: boolean; accounts: { id: string; displayName: string | null; imageUrl: string | null }[] }>("/intel/postpeer/accounts"), retry: false });
+  React.useEffect(() => {
+    if (params.get("postpeer") === "connected") qc.invalidateQueries({ queryKey: ["intel", "postpeer"] });
+  }, [params, qc]);
+  const connect = useMutation({
+    mutationFn: () => api.post<{ url: string }>("/intel/postpeer/connect"),
+    onSuccess: (r) => {
+      window.open(r.url, "_blank", "noopener");
+      toast.message("Authorize X in the new tab, then come back and press Refresh.");
+    },
+    onError: (e) => toastError(e),
+  });
+  if (!q.data?.configured) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-2 text-[12.5px] rounded-lg border border-line bg-surface px-4 py-2.5">
+      <PlatformIcon platform="x" size={13} />
+      <span className="text-ink font-medium">PostPeer X analytics</span>
+      {q.data.accounts.length ? (
+        <span className="text-muted">connected: {q.data.accounts.map((a) => a.displayName ?? a.id).join(", ")}</span>
+      ) : (
+        <span className="text-muted">no X account connected yet — PostPeer can only read accounts you connect</span>
+      )}
+      <span className="text-muted">·</span>
+      <CreditBalance source="postpeer" />
+      <div className="ml-auto flex gap-1.5">
+        <Button size="sm" variant="ghost" onClick={() => qc.invalidateQueries({ queryKey: ["intel", "postpeer"] })}>
+          <ArrowsClockwise size={12} /> Refresh
+        </Button>
+        <Button size="sm" onClick={() => connect.mutate()} loading={connect.isPending}>
+          {q.data.accounts.length ? "Connect another" : "Connect X"} <ArrowSquareOut size={12} />
+        </Button>
+      </div>
+    </div>
+  );
+}
 
 const PLATFORMS = [
   ["all", "All"],
@@ -119,9 +173,10 @@ function AnalyzeBox({ onAnalyzed }: { onAnalyzed: (entityId: string | null) => v
   const qc = useQueryClient();
   const [url, setUrl] = React.useState("");
   const [result, setResult] = React.useState<{ outcome: Outcome; entityId: string | null } | null>(null);
-  const [paid, setPaid] = React.useState<{ provider: string; label: string; estimatedCostUsd: number; note: string } | null>(null);
+  const [paid, setPaid] = React.useState<PaidOption | null>(null);
   const [cap, setCap] = React.useState("0.10");
-  const cfg = useQuery({ queryKey: ["intel", "config"], queryFn: () => api.get<{ apifyConfigured: boolean; maxPaidChargeUsd: number }>("/intel/config") });
+  const cfg = useQuery({ queryKey: ["intel", "config"], queryFn: () => api.get<IntelConfig>("/intel/config") });
+  const hasKey = (s: SourceKey) => (s === "apify" ? !!cfg.data?.apifyConfigured : !!cfg.data?.sources?.[s]);
   const analyze = useMutation({
     mutationFn: (body: Record<string, unknown>) => api.post<{ outcome: Outcome; entityId: string | null }>("/intel/analyze", body),
     onSuccess: (r) => {
@@ -159,7 +214,7 @@ function AnalyzeBox({ onAnalyzed }: { onAnalyzed: (entityId: string | null) => v
             Analyze
           </Button>
         </form>
-        <p className="text-[11.5px] text-muted mt-2">Uses free public sources only. Nothing requires logging in to the platform, and paid sources never run without your confirmation.</p>
+        <p className="text-[11.5px] text-muted mt-2">Uses free public sources first. Nothing requires logging in to the platform. Paid sources (SocialCrawl, PostPeer, Apify) never run without your confirmation, and the watchlist only uses free sources.</p>
 
         {o && (
           <div className="mt-5 space-y-4 animate-enter">
@@ -240,23 +295,28 @@ function AnalyzeBox({ onAnalyzed }: { onAnalyzed: (entityId: string | null) => v
               </div>
             )}
             {o.paidOptions?.length ? (
-              cfg.data?.apifyConfigured ? (
-                <div className="rounded-lg border border-line bg-subtle px-4 py-3 flex flex-wrap items-center gap-3">
-                  <div className="flex-1 min-w-[220px] text-[12.5px]">
-                    <div className="font-medium text-ink">Optional paid source</div>
-                    <div className="text-muted">
-                      {o.paidOptions[0].label}: {o.paidOptions[0].note}. Estimated ≈ {fmtUsd(o.paidOptions[0].estimatedCostUsd)}.
+              <div className="rounded-lg border border-line bg-subtle divide-y divide-line">
+                <div className="px-4 pt-3 pb-2 text-[12.5px] font-medium text-ink">Optional paid sources — each runs once, only after you confirm</div>
+                {o.paidOptions.map((p) => (
+                  <div key={p.provider} className="px-4 py-2.5 flex flex-wrap items-center gap-3">
+                    <div className="flex-1 min-w-[220px] text-[12.5px]">
+                      <div className="text-ink">
+                        {p.label} <span className="text-muted">· {costLabel(p)}</span>
+                      </div>
+                      <div className="text-muted">{p.note}</div>
                     </div>
+                    {hasKey(p.requires) ? (
+                      <Button size="sm" onClick={() => setPaid(p)}>
+                        Fetch with {p.label}…
+                      </Button>
+                    ) : (
+                      <Button asChild size="sm" variant="ghost">
+                        <Link to="/settings?tab=data">Add {SOURCE_NAME[p.requires]}</Link>
+                      </Button>
+                    )}
                   </div>
-                  <Button size="sm" onClick={() => setPaid(o.paidOptions![0])}>
-                    Fetch with Apify…
-                  </Button>
-                </div>
-              ) : (
-                <SetupCallout title="A paid source can retrieve this" action={<Button asChild size="sm"><Link to="/settings?tab=data">Add Apify token</Link></Button>}>
-                  {o.paidOptions[0].label}: {o.paidOptions[0].note}. Requires your Apify token and a confirmation per request.
-                </SetupCallout>
-              )
+                ))}
+              </div>
             ) : null}
           </div>
         )}
@@ -265,17 +325,29 @@ function AnalyzeBox({ onAnalyzed }: { onAnalyzed: (entityId: string | null) => v
         open={!!paid}
         onOpenChange={(v) => !v && setPaid(null)}
         title="Use a paid source for this request?"
-        description={paid ? `${paid.label} — ${paid.note}. Estimated ≈ ${fmtUsd(paid.estimatedCostUsd)}, charged to your Apify account. Runs once; it is never scheduled automatically.` : ""}
+        description={
+          paid
+            ? paid.requires === "apify"
+              ? `${paid.label} — ${paid.note}. Estimated ≈ ${fmtUsd(paid.estimatedCostUsd ?? 0)}, charged to your Apify account. Runs once; it is never scheduled automatically.`
+              : `${paid.label} — ${paid.note}. Uses up to ${costLabel(paid)} from your ${paid.label} account (failed and not-found lookups are refunded). Runs once; it is never scheduled automatically.`
+            : ""
+        }
         confirmLabel="Fetch now"
         loading={analyze.isPending}
         onConfirm={() => {
-          if (paid) analyze.mutate({ url, paidProvider: paid.provider, confirmPaid: true, maxChargeUsd: Number(cap) });
+          if (paid) analyze.mutate({ url, paidProvider: paid.provider, confirmPaid: true, ...(paid.requires === "apify" ? { maxChargeUsd: Number(cap) } : {}) });
         }}
       >
-        <label className="flex items-center gap-2 text-[12.5px]">
-          Hard spend cap (USD)
-          <Input type="number" min={0.01} max={cfg.data?.maxPaidChargeUsd ?? 1} step={0.01} value={cap} onChange={(e) => setCap(e.target.value)} className="w-24 h-7" />
-        </label>
+        {paid?.requires === "apify" ? (
+          <label className="flex items-center gap-2 text-[12.5px]">
+            Hard spend cap (USD)
+            <Input type="number" min={0.01} max={cfg.data?.maxPaidChargeUsd ?? 1} step={0.01} value={cap} onChange={(e) => setCap(e.target.value)} className="w-24 h-7" />
+          </label>
+        ) : paid ? (
+          <div className="text-[12.5px]">
+            <CreditBalance source={paid.requires} />
+          </div>
+        ) : null}
       </ConfirmDialog>
     </Card>
   );
@@ -510,6 +582,7 @@ export default function IntelPage() {
         </div>
 
         <AnalyzeBox onAnalyzed={(id) => id && set("entity", id)} />
+        <PostPeerPanel />
 
         {entityId && <EntityDetail id={entityId} onClose={() => set("entity", null)} />}
 

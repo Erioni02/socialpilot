@@ -1,12 +1,14 @@
 import { ProviderError, safeFetch } from "@socialpilot/core";
-import type { IntelOutcome, IntelPost, IntelProvider, IntelResult, MetricKey, MetricValue } from "./types";
+import { postpeerX, socialcrawlCredits, socialcrawlInstagram, socialcrawlTiktok } from "./credit-sources";
+import type { IntelOutcome, IntelPost, IntelProvider, IntelResult, MetricKey, MetricValue, PaidOption } from "./types";
 import type { ParsedSocialUrl } from "./urls";
 
 /**
  * Data providers for public social metrics. Each is independent and replaceable:
  *  - Free providers read data the platform itself publishes to logged-out visitors (no login, no CAPTCHA solving,
  *    no proxy rotation, an honest User-Agent). They can stop working whenever a platform changes its pages.
- *  - Paid providers (Apify) run ONLY when the user explicitly approves a specific request, with a hard spend cap.
+ *  - Paid providers (SocialCrawl, PostPeer, Apify) run ONLY when the user explicitly approves a specific request,
+ *    with a hard spend cap.
  */
 
 // ───────────── Rate limiting (per provider, in-process) ─────────────
@@ -100,12 +102,11 @@ export const tiktokProfileUnavailable: IntelProvider = {
   label: "TikTok public profile",
   paid: false,
   supports: (u) => u.platform === "tiktok" && u.kind === "profile",
-  async fetch(u) {
+  async fetch() {
     return {
       status: "unavailable",
       message:
         "TikTok doesn't serve profile pages to non-browser clients, so there is no free source for profile stats. Analyze any of this creator's video URLs instead — follower, likes and video counts are included with each video.",
-      paidOptions: [{ provider: "apify-tiktok", label: "Apify TikTok Scraper", estimatedCostUsd: 0.06, note: `Profile + up to 20 recent videos for @${u.handle}` }],
     };
   },
 };
@@ -167,7 +168,7 @@ export const xProfileUnavailable: IntelProvider = {
     return {
       status: "unavailable",
       message:
-        "X no longer exposes profile stats (followers, posts) to logged-out clients for free. Analyze individual post URLs, or connect your own X account on the Integrations page to see your account metrics through the official API (paid X plan). SocialPilot never makes paid X API calls automatically.",
+        "X no longer exposes profile stats (followers, posts) to logged-out clients for free. Analyze individual post URLs, or read your own account's post analytics through PostPeer (connect your X account to PostPeer first). SocialPilot never makes paid calls automatically.",
     };
   },
 };
@@ -182,12 +183,7 @@ export const instagramUnavailable: IntelProvider = {
     return {
       status: "unavailable",
       message:
-        "Instagram requires login to view post and profile data, and its old Basic Display API was discontinued, so there is no free logged-out source. For your own professional account, connect Instagram on the Integrations page (official API: insights, reach, likes, comments). For other public accounts you can run a paid Apify scrape with your approval.",
-      paidOptions: [
-        u.kind === "profile"
-          ? { provider: "apify-instagram", label: "Apify Instagram Scraper", estimatedCostUsd: 0.06, note: `Profile details + up to 12 recent posts for @${u.handle}` }
-          : { provider: "apify-instagram", label: "Apify Instagram Scraper", estimatedCostUsd: 0.01, note: "Likes, comments, views (Reels), caption and timestamp for this post" },
-      ],
+        "Instagram requires login to view post and profile data, and its old Basic Display API was discontinued, so there is no free logged-out source. For your own professional account, connect Instagram on the Integrations page (official API: insights, reach, likes, comments). For other public accounts you can run a paid lookup (SocialCrawl or Apify) with your approval.",
     };
   },
 };
@@ -348,4 +344,36 @@ export const apifyTiktok: IntelProvider = {
 };
 
 export const FREE_PROVIDERS: IntelProvider[] = [tiktokPublicPage, tiktokProfileUnavailable, xSyndication, xProfileUnavailable, instagramUnavailable];
-export const PAID_PROVIDERS: IntelProvider[] = [apifyInstagram, apifyTiktok];
+export const PAID_PROVIDERS: IntelProvider[] = [socialcrawlTiktok, socialcrawlInstagram, postpeerX, apifyInstagram, apifyTiktok];
+export const PAID_PROVIDER_IDS = ["socialcrawl-tiktok", "socialcrawl-instagram", "postpeer-x", "apify-instagram", "apify-tiktok"] as const;
+
+/**
+ * Paid, opt-in sources that could fill in what the free source couldn't. Offered to the user — never run without an
+ * explicit per-request confirmation.
+ */
+export function paidOptionsFor(u: ParsedSocialUrl, outcome: IntelOutcome): PaidOption[] {
+  if (outcome.status === "ok" || outcome.status === "not_found" || outcome.status === "private") return [];
+  const who = u.handle ?? u.externalId;
+  if (u.platform === "tiktok") {
+    return u.kind === "profile"
+      ? [
+          { provider: "socialcrawl-tiktok", requires: "socialcrawl", label: "SocialCrawl", estimatedCredits: socialcrawlCredits(u), note: `Exact profile stats + 10 recent videos for @${who}` },
+          { provider: "apify-tiktok", requires: "apify", label: "Apify TikTok Scraper", estimatedCostUsd: 0.06, note: `Profile + up to 20 recent videos for @${who}` },
+        ]
+      : [{ provider: "socialcrawl-tiktok", requires: "socialcrawl", label: "SocialCrawl", estimatedCredits: 1, note: "Views, likes, comments, shares and saves for this video" }];
+  }
+  if (u.platform === "instagram") {
+    return u.kind === "profile"
+      ? [
+          { provider: "socialcrawl-instagram", requires: "socialcrawl", label: "SocialCrawl", estimatedCredits: socialcrawlCredits(u), note: `Exact followers, posts + 12 recent posts for @${who}` },
+          { provider: "apify-instagram", requires: "apify", label: "Apify Instagram Scraper", estimatedCostUsd: 0.06, note: `Profile details + up to 12 recent posts for @${who}` },
+        ]
+      : [
+          { provider: "socialcrawl-instagram", requires: "socialcrawl", label: "SocialCrawl", estimatedCredits: 1, note: "Likes, comments, views (Reels) and caption for this post" },
+          { provider: "apify-instagram", requires: "apify", label: "Apify Instagram Scraper", estimatedCostUsd: 0.01, note: "Likes, comments, views (Reels), caption and timestamp for this post" },
+        ];
+  }
+  return u.kind === "profile"
+    ? [{ provider: "postpeer-x", requires: "postpeer", label: "PostPeer", estimatedCredits: 1, note: `Impressions, likes and replies for @${who}'s recent posts (only if @${who} is your account connected in PostPeer)` }]
+    : [{ provider: "postpeer-x", requires: "postpeer", label: "PostPeer", estimatedCredits: 1, note: "Impressions, likes and replies for this post, read through your X account connected in PostPeer" }];
+}
