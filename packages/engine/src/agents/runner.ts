@@ -3,7 +3,7 @@ import { prisma, Prisma, type Project, type Task } from "@socialpilot/db";
 import { AppError, createLogger, redactString } from "@socialpilot/core";
 import { AGENT_LABELS, AUTONOMY_LABELS, normalizePolicy, PERMISSIONS, checkPermission, estimateTextCost, type AgentType } from "@socialpilot/shared";
 import type { ImageInput, ToolResult } from "@socialpilot/ai";
-import { checkBudget, recordUsage, resolveTextAI, BudgetExceededError } from "../ai/service";
+import { checkBudget, recordUsage, resolveTextAI, BudgetExceededError, textCost } from "../ai/service";
 import { assertNotStopped } from "../projects/context";
 import { emit } from "../infra/events";
 import { enqueue } from "../infra/queue";
@@ -172,12 +172,12 @@ export async function runAgentTask(payload: { taskId: string }) {
     await setStatus({ status: "running" });
 
     let turn = await (async () => {
-      await checkBudget({ userId: project.ownerId, projectId: project.id, taskId: task.id }, estimateTextCost(model, 8000, 2000));
+      await checkBudget({ userId: project.ownerId, projectId: project.id, taskId: task.id }, textCost(ai, model, 8000, 2000));
       return session.sendUser(userText, att.images);
     })();
     const maxTurns = (task.input as any)?.autonomous ? MAX_TURNS_AUTONOMOUS : MAX_TURNS;
     for (let i = 0; i < maxTurns; i++) {
-      await recordUsage({ userId: project.ownerId, projectId: project.id, taskId: task.id }, { provider: ai.providerId, model, kind: "text", usage: turn.usage, costUsd: estimateTextCost(model, turn.usage.inputTokens, turn.usage.outputTokens) });
+      await recordUsage({ userId: project.ownerId, projectId: project.id, taskId: task.id }, { provider: ai.providerId, model, kind: "text", usage: turn.usage, costUsd: textCost(ai, model, turn.usage.inputTokens, turn.usage.outputTokens) });
       if (turn.text) await step(task.id, seq, { type: "message", output: { role: "assistant", text: redactString(turn.text) } });
       if (turn.stopReason === "refusal") throw new AppError(422, turn.text, "model_refusal");
       if (!turn.toolCalls.length) {
@@ -208,7 +208,7 @@ export async function runAgentTask(payload: { taskId: string }) {
         }
       }
       if (finishPayload) break;
-      await checkBudget({ userId: project.ownerId, projectId: project.id, taskId: task.id }, estimateTextCost(model, 8000, 2000));
+      await checkBudget({ userId: project.ownerId, projectId: project.id, taskId: task.id }, textCost(ai, model, 8000, 2000));
       turn = await session.sendToolResults(results);
     }
     if (!finishPayload) finishPayload = { summary: "Stopped after reaching the maximum number of steps.", outstanding: ["Review the task log and continue with a follow-up task."] };

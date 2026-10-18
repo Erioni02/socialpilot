@@ -301,13 +301,14 @@ export async function generateImages(
   const ai = await resolveImageAI(ctx.userId, ctx.project, input.provider);
   const model = input.model ?? ai.model;
   const n = input.n ?? 1;
-  const cost = estimateUnitCost(model, n);
+  const unit = (k: number) => (ai.unitPrice != null ? ai.unitPrice * k : estimateUnitCost(model, k));
+  const cost = unit(n);
   await checkBudget(ctx, cost);
   const prompt = input.prompt + (input.applyBrandStyle !== false ? brandPromptSuffix(ctx.project) : "");
   const out: GeneratedMedia[] = await ai.provider.generate({ model, prompt, size: input.size ?? "1024x1024", n });
   const real = out.filter((o) => o.data.length > 0);
   if (!real.length) throw new Error("The image provider returned no image data — nothing was saved.");
-  await recordUsage(ctx, { provider: ai.providerId, model, kind: "image", units: real.length, costUsd: estimateUnitCost(model, real.length) });
+  await recordUsage(ctx, { provider: ai.providerId, model, kind: "image", units: real.length, costUsd: unit(real.length) });
   const assets = [];
   for (let i = 0; i < real.length; i++) {
     const r = await createAsset(
@@ -315,7 +316,7 @@ export async function generateImages(
       { name: input.name ?? input.prompt.slice(0, 60) + (real.length > 1 ? ` (${i + 1})` : ""), kind: "image", folder: input.folder, campaignId: input.campaignId, source: "generated", createdBy: ctx.createdBy },
       real[i].data,
       normalizeImageMime(real[i].mimeType),
-      { operation: "generate", params: { size: input.size, userPrompt: input.prompt }, provider: ai.providerId, model, prompt, costUsd: estimateUnitCost(model), createdBy: ctx.createdBy },
+      { operation: "generate", params: { size: input.size, userPrompt: input.prompt }, provider: ai.providerId, model, prompt, costUsd: unit(1), createdBy: ctx.createdBy },
     );
     assets.push(r.asset);
   }

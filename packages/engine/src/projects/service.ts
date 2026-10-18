@@ -5,6 +5,7 @@ import { DEFAULT_APPROVALS, DEFAULT_PERMISSIONS, slugify } from "@socialpilot/sh
 import { z } from "zod";
 import { aiJson, hasTextAI } from "../ai/service";
 import { getApiKey } from "../infra/credentials";
+import { listCustomProviders } from "../infra/custom-providers";
 import { emit } from "../infra/events";
 import { enqueue } from "../infra/queue";
 import { audit } from "../infra/audit";
@@ -165,6 +166,7 @@ export async function projectReadiness(userId: string, project: Project) {
   const has = (p: string) => integrations.some((i) => i.provider === p && i.status === "connected");
   const textAI = await hasTextAI(userId, project);
   const imageAI = !!((await getApiKey(userId, "cloudflare")) || (await getApiKey(userId, "openai")) || (await getApiKey(userId, "replicate")) || (await getApiKey(userId, "stability")));
+  const customImage = (await listCustomProviders(userId)).some((c) => c.capabilities.includes("image"));
   const videoAI = !!((await getApiKey(userId, "byteplus")) || (await getApiKey(userId, "replicate")));
   return {
     website: !!project.websiteUrl,
@@ -172,7 +174,7 @@ export async function projectReadiness(userId: string, project: Project) {
     analytics: has("ga4") || has("plausible"),
     repository: has("github"),
     deployment: has("vercel"),
-    ai: { text: textAI, image: imageAI, video: videoAI },
+    ai: { text: textAI, image: imageAI || customImage, video: videoAI },
     publicMedia: !!config.PUBLIC_BASE_URL,
   };
 }

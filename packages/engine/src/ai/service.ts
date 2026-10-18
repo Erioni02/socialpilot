@@ -2,6 +2,7 @@ import { prisma, type Project } from "@socialpilot/db";
 import { AppError, SetupRequiredError } from "@socialpilot/core";
 import {
   completeJson,
+  openaiProvider,
   imageProvider,
   textProvider,
   transcriptionProvider,
@@ -10,9 +11,10 @@ import {
   type TextProvider,
   type Usage,
 } from "@socialpilot/ai";
-import { AI_PROVIDER_CATALOG, estimateTextCost, estimateUnitCost, normalizePolicy, type AiConfig } from "@socialpilot/shared";
+import { AI_PROVIDER_CATALOG, estimateTextCost, estimateUnitCost, isCustomProvider, normalizePolicy, type AiConfig, type CustomCapability } from "@socialpilot/shared";
 import type { z } from "zod";
 import { getApiKey, getProviderCreds } from "../infra/credentials";
+import { getCustomProvider, listCustomProviders, validateBaseUrl } from "../infra/custom-providers";
 
 export interface AiCallContext {
   userId: string;
@@ -38,12 +40,37 @@ function aiConfigOf(project?: Pick<Project, "aiConfig"> | null): AiConfig {
   return ((project?.aiConfig as AiConfig | null) ?? {}) as AiConfig;
 }
 
-async function firstConfigured(userId: string, order: string[]) {
+type Found = { provider: string; creds: { apiKey: string; accountId?: string; baseUrl?: string }; custom?: NonNullable<Awaited<ReturnType<typeof getCustomProvider>>> };
+
+async function firstConfigured(userId: string, order: string[]): Promise<Found | null> {
   for (const p of order) {
+    if (isCustomProvider(p)) {
+      const c = await getCustomProvider(userId, p);
+      if (c) return { provider: p, creds: { apiKey: c.apiKey ?? "", baseUrl: c.baseUrl }, custom: c };
+      continue;
+    }
     const creds = await getProviderCreds(userId, p);
     if (creds) return { provider: p, creds };
   }
   return null;
+}
+
+/** Custom (user-added) providers that declare a capability, in the order they were added. */
+async function customIds(userId: string, cap: CustomCapability) {
+  return (await listCustomProviders(userId)).filter((c) => c.capabilities.includes(cap)).map((c) => c.id);
+}
+
+function customDefault(c: NonNullable<Found["custom"]>, role: string, kind: "text" | "image" = "text"): string {
+  const d = c.defaultModels as Record<string, string | undefined>;
+  const m = d[role] ?? (kind === "text" ? d.text : undefined) ?? c.models.find((x) => x.kind === kind && (!x.roles || x.roles.includes(role as any)))?.id ?? c.models.find((x) => x.kind === kind)?.id;
+  if (!m) throw new SetupRequiredError(`Custom provider "${c.name}" has no ${kind} model set. Edit it in Settings → AI providers and add a model id.`, { kind: "ai_provider", link: "/settings?tab=ai" });
+  return m;
+}
+
+/** Per-call text cost: custom providers use their configured prices (0 when unknown), built-ins use the price table. */
+export function textCost(ai: { price?: { input?: number; output?: number } | null }, model: string, inTok: number, outTok: number) {
+  if (ai.price) return (inTok * (ai.price.input ?? 0) + outTok * (ai.price.output ?? 0)) / 1_000_000;
+  return estimateTextCost(model, inTok, outTok);
 }
 
 function roleConfig(cfg: AiConfig, role: TextRole): { provider?: string | null; model?: string | null } {
@@ -62,9 +89,18 @@ export async function resolveTextAI(userId: string, project?: Pick<Project, "aiC
   const role = opts.role ?? "text";
   const rc = roleConfig(cfg, role);
   const preferred = [rc.provider, cfg.textProvider].filter((p): p is string => !!p);
-  let order = [...new Set([...preferred, ...TEXT_ORDER])];
+  const customs = await listCustomProviders(userId);
+  const customOk = (id: string) => {
+    const c = customs.find((x) => x.id === id);
+    if (!c) return false;
+    if (opts.needsTools && !c.capabilities.includes("tools")) return false;
+    if (role === "vision" && !c.capabilities.includes("vision")) return false;
+    return c.capabilities.includes("text") || c.capabilities.includes("vision");
+  };
+  let order = [...new Set([...preferred, ...TEXT_ORDER, ...customs.map((c) => c.id)])];
   if (opts.needsTools) order = order.filter((p) => p !== "gemini");
-  if (role === "vision") order = order.filter((p) => VISION_CAPABLE.includes(p));
+  if (role === "vision") order = order.filter((p) => VISION_CAPABLE.includes(p) || isCustomProvider(p));
+  order = order.filter((p) => !isCustomProvider(p) || customOk(p));
   const found = await firstConfigured(userId, order);
   if (!found) {
     throw new SetupRequiredError(
@@ -74,14 +110,18 @@ export async function resolveTextAI(userId: string, project?: Pick<Project, "aiC
       { kind: "ai_provider", link: "/settings?tab=ai" },
     );
   }
+  const pick = (fallback: () => string) =>
+    found.provider === rc.provider && rc.model ? rc.model : found.provider === cfg.textProvider && cfg.textModel && role === "text" ? cfg.textModel : fallback();
+  if (found.custom) {
+    const c = found.custom;
+    await validateBaseUrl(c.baseUrl); // re-checked at call time (DNS can change)
+    const model = pick(() => customDefault(c, role));
+    const price = c.pricing.inputPer1M != null || c.pricing.outputPer1M != null ? { input: c.pricing.inputPer1M, output: c.pricing.outputPer1M } : { input: 0, output: 0 };
+    return { providerId: found.provider, model, role, price, provider: openaiProvider(c.apiKey ?? "", { id: c.name, baseUrl: c.baseUrl, tokenParam: c.tokenParam }) as ReturnType<typeof textProvider> };
+  }
   const defaults = AI_PROVIDER_CATALOG[found.provider as keyof typeof AI_PROVIDER_CATALOG].defaultModels;
-  const model =
-    found.provider === rc.provider && rc.model
-      ? rc.model
-      : found.provider === cfg.textProvider && cfg.textModel && role === "text"
-        ? cfg.textModel
-        : (defaults[role] ?? defaults.text!);
-  return { providerId: found.provider, model, role, provider: textProvider(found.provider, found.creds) };
+  const model = pick(() => defaults[role] ?? defaults.text!);
+  return { providerId: found.provider, model, role, price: null as { input?: number; output?: number } | null, provider: textProvider(found.provider, found.creds) };
 }
 
 export async function hasTextAI(userId: string, project?: Pick<Project, "aiConfig"> | null): Promise<boolean> {
@@ -152,9 +192,9 @@ export async function recordUsage(
 export async function aiComplete(ctx: AiCallContext, opts: Omit<CompleteOptions, "model"> & { model?: string; role?: TextRole }, project?: Project | null) {
   const ai = await resolveTextAI(ctx.userId, project, { role: opts.role ?? (opts.images?.length ? "vision" : "text") });
   const model = opts.model ?? ai.model;
-  await checkBudget(ctx, estimateTextCost(model, 4000, 2000));
+  await checkBudget(ctx, textCost(ai, model, 4000, 2000));
   const r = await ai.provider.complete({ ...opts, model });
-  await recordUsage(ctx, { provider: ai.providerId, model, kind: opts.images?.length ? "vision" : "text", usage: r.usage, costUsd: estimateTextCost(model, r.usage.inputTokens, r.usage.outputTokens) });
+  await recordUsage(ctx, { provider: ai.providerId, model, kind: opts.images?.length ? "vision" : "text", usage: r.usage, costUsd: textCost(ai, model, r.usage.inputTokens, r.usage.outputTokens) });
   return { ...r, provider: ai.providerId };
 }
 
@@ -165,16 +205,18 @@ export async function aiJson<S extends z.ZodTypeAny>(
 ): Promise<{ data: z.infer<S>; provider: string; model: string }> {
   const ai = await resolveTextAI(ctx.userId, project, { role: opts.role ?? (opts.images?.length ? "vision" : "text") });
   const model = opts.model ?? ai.model;
-  await checkBudget(ctx, estimateTextCost(model, 6000, 3000));
+  await checkBudget(ctx, textCost(ai, model, 6000, 3000));
   const r = await completeJson(ai.provider as TextProvider, { ...opts, model });
-  await recordUsage(ctx, { provider: ai.providerId, model, kind: "text", usage: r.usage, costUsd: estimateTextCost(model, r.usage.inputTokens, r.usage.outputTokens) });
+  await recordUsage(ctx, { provider: ai.providerId, model, kind: "text", usage: r.usage, costUsd: textCost(ai, model, r.usage.inputTokens, r.usage.outputTokens) });
   return { data: r.data, provider: ai.providerId, model };
 }
 
 export async function resolveImageAI(userId: string, project?: Pick<Project, "aiConfig"> | null, wanted?: string, capability: "generate" | "edit" | "remove_background" = "generate") {
   const cfg = aiConfigOf(project);
   const preferred = wanted ?? cfg.imageProvider ?? undefined;
-  let order = preferred ? [preferred, ...IMAGE_ORDER.filter((p) => p !== preferred)] : IMAGE_ORDER;
+  const customImg = capability === "generate" ? await customIds(userId, "image") : [];
+  let order = [...new Set([...(preferred ? [preferred] : []), ...IMAGE_ORDER, ...customImg])];
+  if (capability !== "generate") order = order.filter((p) => !isCustomProvider(p));
   if (capability === "edit") order = order.filter((p) => ["cloudflare", "openai", "replicate"].includes(p));
   if (capability === "remove_background") order = order.filter((p) => p === "replicate" || p === "stability");
   const found = await firstConfigured(userId, order);
@@ -182,9 +224,15 @@ export async function resolveImageAI(userId: string, project?: Pick<Project, "ai
     const needs = capability === "edit" ? "Cloudflare, OpenAI or Replicate" : capability === "remove_background" ? "Replicate or Stability AI" : "Cloudflare Workers AI, OpenAI, Replicate or Stability AI";
     throw new SetupRequiredError(`Image ${capability.replace("_", " ")} needs a ${needs} key. Add one in Settings → AI providers.`, { kind: "ai_provider", link: "/settings?tab=ai" });
   }
+  if (found.custom) {
+    const c = found.custom;
+    await validateBaseUrl(c.baseUrl);
+    const model = found.provider === cfg.imageProvider && cfg.imageModel ? cfg.imageModel : customDefault(c, "image", "image");
+    return { providerId: found.provider, model, unitPrice: c.pricing.perImage ?? 0, provider: openaiProvider(c.apiKey ?? "", { id: c.name, baseUrl: c.baseUrl, tokenParam: c.tokenParam }) as ReturnType<typeof imageProvider> };
+  }
   const model =
     found.provider === cfg.imageProvider && cfg.imageModel ? cfg.imageModel : AI_PROVIDER_CATALOG[found.provider as keyof typeof AI_PROVIDER_CATALOG].defaultModels.image!;
-  return { providerId: found.provider, model, provider: imageProvider(found.provider, found.creds) };
+  return { providerId: found.provider, model, unitPrice: null as number | null, provider: imageProvider(found.provider, found.creds) };
 }
 
 export async function resolveVideoAI(userId: string, project?: Pick<Project, "aiConfig"> | null) {

@@ -6,6 +6,7 @@ import { api, p } from "@/lib/api";
 import { ago, cn, toastError } from "@/lib/utils";
 import { useMeta } from "@/components/common";
 import { Badge, Button, ConfirmDialog, Field, Input, Select, Skeleton, StatusBadge, Tooltip } from "@/components/ui";
+import { CustomProviders, type CustomProvider } from "./CustomProviders";
 
 export type ProviderStatus = {
   provider: string;
@@ -21,7 +22,7 @@ export type ProviderStatus = {
 type ExtraField = { key: "accountId" | "baseUrl"; label: string; envVar: string; optional?: boolean; placeholder?: string };
 
 export function useProviders() {
-  return useQuery({ queryKey: ["providers"], queryFn: () => api.get<{ providers: ProviderStatus[] }>("/providers") });
+  return useQuery({ queryKey: ["providers"], queryFn: () => api.get<{ providers: ProviderStatus[]; custom: CustomProvider[]; presets: unknown[] }>("/providers") });
 }
 
 /**
@@ -212,11 +213,14 @@ export function AiProviderKeys({ only }: { only?: string[] }) {
     );
   const ids = (only ?? Object.keys(meta.aiProviders)).filter((id) => meta.aiProviders[id]);
   return (
+    <div className="space-y-4">
     <div className="rounded-xl border border-line bg-surface divide-y divide-line">
       {ids.map((id) => {
         const c = meta.aiProviders[id];
         return <ProviderKeyRow key={id} id={id} name={c.name} docsUrl={c.docsUrl} keyUrl={c.keyUrl} envVar={c.envVar} capabilities={c.capabilities} extraFields={c.extraFields} status={data?.providers.find((x) => x.provider === id)} />;
       })}
+    </div>
+    {!only && <CustomProviders />}
     </div>
   );
 }
@@ -258,18 +262,28 @@ export function AiConfigEditor({ projectId, initial, onSaved, saveLabel = "Save 
   });
   const nvidiaModels = useQuery({ queryKey: ["providers", "nvidia-models"], queryFn: () => api.get<{ models: string[] }>("/providers/nvidia/models"), staleTime: 3600_000 });
   if (!meta) return <Skeleton className="h-40" />;
-  const configured = (id: string) => !!prov?.providers.find((x) => x.provider === id)?.configured;
+  const customs = prov?.custom ?? [];
+  const catalog: Record<string, any> = {
+    ...meta.aiProviders,
+    ...Object.fromEntries(
+      customs.map((c) => [
+        c.id,
+        { id: c.id, name: `${c.name} (custom)`, capabilities: c.capabilities, defaultModels: c.defaultModels, models: c.models.map((m) => ({ id: m.id, kind: m.kind, label: m.id, roles: m.roles })) },
+      ]),
+    ),
+  };
+  const configured = (id: string) => customs.some((c) => c.id === id) || !!prov?.providers.find((x) => x.provider === id)?.configured;
   return (
     <div className="space-y-4">
       <div className="rounded-xl border border-line bg-surface divide-y divide-line">
         {(["text", "reasoning", "vision", "fast", "image", "video"] as Kind[]).map((kind) => {
           const isRole = ROLE_KINDS.includes(kind);
           const capability = kind === "vision" ? "vision" : isRole ? "text" : kind;
-          const providers = Object.values(meta.aiProviders).filter((c: any) => c.capabilities.includes(capability) && (kind !== "text" || c.capabilities.includes("tools")));
+          const providers = Object.values(catalog).filter((c: any) => c.capabilities.includes(capability) && (kind !== "text" || c.capabilities.includes("tools")));
           const pk = `${kind}Provider` as const;
           const mk = `${kind}Model` as const;
           const current = value[pk] ?? "";
-          const cat = current ? meta.aiProviders[current] : null;
+          const cat = current ? catalog[current] : null;
           const defaultFor = (c: any): string | null => (c?.defaultModels?.[kind] ?? (isRole ? c?.defaultModels?.text : undefined)) ?? null;
           const catalogModels: { id: string; label: string }[] = cat ? cat.models.filter((m: any) => (isRole ? m.kind === "text" && (!m.roles || m.roles.includes(kind)) : m.kind === kind)) : [];
           const models =
@@ -289,7 +303,7 @@ export function AiConfigEditor({ projectId, initial, onSaved, saveLabel = "Save 
                   value={current}
                   onChange={(e) => {
                     const np = e.target.value;
-                    setValue((s) => ({ ...s, [pk]: np || null, [mk]: np ? defaultFor(meta.aiProviders[np]) : null }));
+                    setValue((s) => ({ ...s, [pk]: np || null, [mk]: np ? defaultFor(catalog[np]) : null }));
                   }}
                 >
                   <option value="">{isRole && kind !== "text" ? "Same as main AI" : "Automatic (first configured)"}</option>

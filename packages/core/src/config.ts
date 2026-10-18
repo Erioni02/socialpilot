@@ -41,6 +41,8 @@ const schema = z.object({
   STORAGE_DIR: z.string().default(".data/storage"),
   MAX_UPLOAD_MB: z.coerce.number().default(200),
   ALLOW_REGISTRATION: z.enum(["true", "false"]).default("true"),
+  /** Allow custom AI providers on localhost/private networks (Ollama, LM Studio). Defaults to on outside production. */
+  ALLOW_LOCAL_AI_ENDPOINTS: z.enum(["true", "false"]).optional(),
   WORKER_CONCURRENCY: z.coerce.number().default(4),
   FFMPEG_PATH: z.string().optional(),
   FFPROBE_PATH: z.string().optional(),
@@ -51,6 +53,7 @@ export const config = schema.parse(process.env);
 export type Config = typeof config;
 
 export const isProd = config.NODE_ENV === "production";
+export const allowLocalAiEndpoints = config.ALLOW_LOCAL_AI_ENDPOINTS ? config.ALLOW_LOCAL_AI_ENDPOINTS === "true" : !isProd;
 
 export function storageRoot(): string {
   return path.isAbsolute(config.STORAGE_DIR) ? config.STORAGE_DIR : path.join(ROOT_DIR, config.STORAGE_DIR);

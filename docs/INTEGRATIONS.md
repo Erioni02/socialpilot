@@ -89,6 +89,15 @@ Token based. Create an access token at vercel.com/account/tokens and enter the p
 | NewsAPI / Product Hunt | Extra Discover sources | Settings → Data sources |
 | PageSpeed Insights | Lighthouse scores in audits (works keyless at low quota) | optional |
 
+**Custom providers:** in Settings → AI providers → **Custom providers → Add provider** you can add any OpenAI-compatible API: OpenRouter, Groq, Together, DeepSeek, Mistral, xAI, Fireworks, self-hosted vLLM, Ollama or LM Studio (presets included). For each one you set:
+
+- the base URL and an optional API key (stored encrypted);
+- what it can do: text, tool calling (needed for agents), vision, image generation (`/images/generations`);
+- its model ids and default model per role;
+- optional prices for budget tracking.
+
+It then appears in every model-role picker. Remote URLs must use HTTPS. Localhost/private URLs are allowed only when `ALLOW_LOCAL_AI_ENDPOINTS` is on (default outside production); cloud-metadata addresses are always blocked. Video generation stays on Seedance/Replicate because there is no common video API standard.
+
 **Model roles:** each project picks a provider and model for *Main AI*, *Thinking & planning*, *Vision*, *Fast tasks*, *Image generation* and *Video generation* (Project settings → AI). Main models without native vision get attachments described by the vision model, and agents have an `analyze_media` tool that sends images, or FFmpeg-sampled video frames, to the vision model.
 
 Model IDs are free text in project AI settings, so newer models can be used without code changes. Cost estimates for budget enforcement are in `packages/shared/src/pricing.ts`.

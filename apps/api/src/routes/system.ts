@@ -4,7 +4,8 @@ import { prisma } from "@socialpilot/db";
 import { badRequest, config, redactString } from "@socialpilot/core";
 import { listNvidiaModels, testProvider } from "@socialpilot/ai";
 import { AI_PROVIDER_CATALOG, AGENT_LABELS, AUTONOMY_LABELS, CAPABILITY_REGISTRY, DATA_PROVIDER_CATALOG, INTEGRATION_CATALOG, PERMISSION_LABELS, providerCredentialSchema } from "@socialpilot/shared";
-import { audit, credentialStatus, ffmpeg, resolveSecret, saveCredential } from "@socialpilot/engine";
+import { audit, credentialStatus, fetchCustomModels, ffmpeg, getCustomProvider, listCustomProviders, resolveSecret, saveCredential, saveCustomProvider } from "@socialpilot/engine";
+import { CUSTOM_PROVIDER_PRESETS, isCustomProvider } from "@socialpilot/shared";
 import { parse, userOf } from "../lib/http";
 
 let ffmpegCache: { at: number; value: Awaited<ReturnType<typeof ffmpeg.ffmpegAvailable>> } | null = null;
@@ -46,7 +47,31 @@ export default async function systemRoutes(app: FastifyInstance) {
     oauthCallbackBase: `${config.API_PUBLIC_URL.replace(/\/$/, "")}/api/oauth`,
   }));
 
-  app.get("/providers", { preHandler: app.requireAuth }, async (req) => ({ providers: await credentialStatus(userOf(req).id) }));
+  app.get("/providers", { preHandler: app.requireAuth }, async (req) => ({
+    providers: await credentialStatus(userOf(req).id),
+    custom: await listCustomProviders(userOf(req).id),
+    presets: CUSTOM_PROVIDER_PRESETS,
+  }));
+
+  // ───── Custom (user-added, OpenAI-compatible) providers ─────
+  app.post("/providers/custom", { preHandler: app.requireAuth }, async (req) => {
+    const user = userOf(req);
+    const id = await saveCustomProvider(user.id, req.body);
+    await audit({ userId: user.id, actor: "user", action: "custom_provider.created", target: id, ip: req.ip });
+    return { id };
+  });
+  app.put("/providers/custom/:id", { preHandler: app.requireAuth }, async (req) => {
+    const user = userOf(req);
+    const { id } = req.params as { id: string };
+    if (!isCustomProvider(id)) throw badRequest("Not a custom provider");
+    await saveCustomProvider(user.id, req.body, id);
+    await audit({ userId: user.id, actor: "user", action: "custom_provider.updated", target: id, ip: req.ip });
+    return { id };
+  });
+  app.get("/providers/custom/:id/models", { preHandler: app.requireAuth }, async (req) => {
+    const { id } = req.params as { id: string };
+    return { models: await fetchCustomModels(userOf(req).id, id) };
+  });
 
   app.put("/providers/:provider", { preHandler: app.requireAuth }, async (req) => {
     const { provider } = req.params as { provider: string };
@@ -74,6 +99,21 @@ export default async function systemRoutes(app: FastifyInstance) {
   app.post("/providers/:provider/test", { preHandler: app.requireAuth }, async (req) => {
     const { provider } = req.params as { provider: string };
     const user = userOf(req);
+    if (isCustomProvider(provider)) {
+      const c = await getCustomProvider(user.id, provider);
+      if (!c) throw badRequest("Not configured");
+      let ok = false;
+      let message = "";
+      try {
+        const models = await fetchCustomModels(user.id, provider);
+        ok = true;
+        message = `Connected — ${models.length} model(s) listed`;
+      } catch (e) {
+        message = redactString((e as Error).message).slice(0, 400);
+      }
+      await prisma.providerCredential.update({ where: { userId_provider: { userId: user.id, provider } }, data: { status: ok ? "ok" : "error", lastTestedAt: new Date(), lastError: ok ? null : message } });
+      return { ok, message };
+    }
     const secret = await resolveSecret(user.id, provider);
     if (!secret) throw badRequest("Not configured");
     let ok = false;
