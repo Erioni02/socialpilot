@@ -15,6 +15,7 @@ import { emit } from "./infra/events";
 import { runTrafficReportJob, refreshWatchedIntel } from "./intel/service";
 import { runSocialPulse } from "./intel/pulse";
 import { trackPostedTarget, dispatchPostTracking } from "./content/manual";
+import { dispatchLinkedAccountSyncs, syncLinkedAccount } from "./analytics/accounts";
 export { dispatchPostTracking };
 
 async function opCtx(projectId: string, createdBy = "user") {
@@ -57,6 +58,8 @@ export const JOB_HANDLERS: Record<string, JobHandler> = {
   "intel.refresh": () => refreshWatchedIntel(),
   "intel.pulse": () => runSocialPulse(),
   "posts.track": (p) => trackPostedTarget(p),
+  "accounts.sync": () => dispatchLinkedAccountSyncs(),
+  "account.sync": (p) => syncLinkedAccount(p.integrationId, { automatic: false }),
   "automation.run": (p) => runAutomation(p),
   "approval.execute": (p) => executeApprovalJob(p),
   "media.generateImage": async (p) => {

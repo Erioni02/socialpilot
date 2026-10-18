@@ -34,7 +34,9 @@ export async function schedulePost(project: Project, postId: string, input: { sc
   if (actor.kind !== "user") {
     await guard(project, "schedule", actor);
   }
-  const publishGate = actor.kind === "user" ? { requiresApproval: false } : await guard(project, "publish", actor);
+  // SocialPilot never posts to social networks: everything goes to the owner's Ready to post desk.
+  opts = { ...opts, manual: true };
+  const publishGate = { requiresApproval: false };
 
   const ownerId = project.ownerId;
   const report = await qualityCheck(ownerId, project, post.id);
@@ -303,7 +305,11 @@ export async function dispatchDueTargets() {
     take: 100,
     include: { post: true },
   });
-  for (const t of due) await enqueue("publish.target", { targetId: t.id }, { projectId: t.post.projectId, dedupeKey: `publish:${t.id}:${t.attempts}:${t.scheduledAt?.getTime()}` });
+  // SocialPilot no longer posts via APIs: any legacy "scheduled" target becomes a manual Ready-to-post item.
+  for (const t of due) {
+    await prisma.postTarget.update({ where: { id: t.id }, data: { status: "manual", integrationId: null, lastError: "You publish this one yourself from Ready to post." } });
+    await refreshPostStatus(t.postId);
+  }
   const manual = await prisma.postTarget.findMany({ where: { status: "manual", scheduledAt: { lte: new Date() }, providerState: { equals: {} } }, take: 50, include: { post: { include: { project: true } } } });
   for (const t of manual) {
     await prisma.postTarget.update({ where: { id: t.id }, data: { providerState: { handoffNotified: new Date().toISOString() } } });

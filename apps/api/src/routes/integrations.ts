@@ -7,6 +7,9 @@ import { GitHubClient, ga4ListProperties } from "@socialpilot/integrations";
 import { INTEGRATION_CATALOG, INTEGRATION_PROVIDERS, type IntegrationProvider } from "@socialpilot/shared";
 import {
   addPublicProfile,
+  linkSocialAccount,
+  syncLinkedAccount,
+  unlinkSocialAccount,
   beginOAuth,
   completeOAuth,
   connectWithKey,
@@ -50,6 +53,7 @@ export default async function integrationRoutes(app: FastifyInstance) {
     const { provider } = parse(z.object({ provider: z.enum(INTEGRATION_PROVIDERS) }), req.params);
     const user = userOf(req);
     const entry = INTEGRATION_CATALOG[provider];
+    if (entry.kind === "social") throw badRequest("Social accounts are linked by pasting the profile URL — SocialPilot reads analytics only and never posts.");
     if (entry.authType === "oauth2") {
       const body = parse(z.object({ redirectTo: z.string().max(300).optional() }), req.body);
       const redirectTo = body.redirectTo?.startsWith("/") && !body.redirectTo.startsWith("//") ? body.redirectTo : undefined;
@@ -65,15 +69,18 @@ export default async function integrationRoutes(app: FastifyInstance) {
     }
   });
 
+  /** Link a social account by its profile URL (no OAuth). Starts the first analytics sync right away. */
   app.post("/projects/:projectId/integrations/public-profile", P, async (req) => {
     const { url } = parse(z.object({ url: z.string().min(3).max(500) }), req.body);
-    const parsed = parseProfileUrl(url);
-    if (!parsed) throw badRequest("Enter a public Instagram, TikTok or X profile URL (e.g. https://x.com/yourbrand)");
-    const row = await addPublicProfile(userOf(req).id, req.project, parsed.platform, parsed.handle, parsed.url);
-    return {
-      integration: publicIntegration(row),
-      note: "A public profile URL lets SocialPilot reference your account, but it does not grant access to private analytics, publishing or comments. Connect with OAuth for that.",
-    };
+    const row = await linkSocialAccount(userOf(req).id, req.project, url);
+    await enqueue("account.sync", { integrationId: row.id }, { projectId: req.project.id, dedupeKey: `account:${row.id}:link`, maxAttempts: 1 });
+    return { integration: publicIntegration(row), note: "Linked. Analytics load in the background." };
+  });
+
+  app.delete("/projects/:projectId/linked-accounts/:integrationId", P, async (req) => {
+    const { integrationId } = req.params as { integrationId: string };
+    await unlinkSocialAccount(userOf(req).id, req.project, integrationId);
+    return { ok: true };
   });
 
   app.post("/projects/:projectId/integrations/:integrationId/test", P, async (req) => {
@@ -85,7 +92,10 @@ export default async function integrationRoutes(app: FastifyInstance) {
   app.post("/projects/:projectId/integrations/:integrationId/sync", P, async (req) => {
     const { integrationId } = req.params as { integrationId: string };
     const i = await ownedIntegration(req.project.id, integrationId);
-    if (i.status === "public_only") throw badRequest("Public profiles cannot be synced. Connect via OAuth.");
+    if (i.kind === "social") {
+      // Linked accounts: stats + post feed from the statistics API (2 requests of the monthly budget).
+      return syncLinkedAccount(i.id, { automatic: false });
+    }
     const job = await enqueue("sync.integration", { integrationId }, { projectId: req.project.id, maxAttempts: 1 });
     if (i.kind === "social") await enqueue("inbox.sync", { integrationId }, { projectId: req.project.id, maxAttempts: 1 });
     return { jobId: job.id };

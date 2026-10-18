@@ -8,10 +8,10 @@ import { Badge, Button, Card, CardBody, CardHeader, Empty, PageHeader, Skeleton,
 import { api, p } from "@/lib/api";
 import { fmtNum, titleCase, toastError } from "@/lib/utils";
 import { axisProps, CHART, Legend, SERIES_COLORS, shortDate, tooltipProps } from "@/components/insights/shared";
-import { SocialSection, type SocialAccount } from "@/components/insights/SocialSection";
 import { WebSection, type WebResponse } from "@/components/insights/WebSection";
 import { TrafficPanel } from "@/components/insights/TrafficPanel";
 import { PostPerformance } from "@/components/insights/PostPerformance";
+import { AccountAnalytics, PlanNextPostsButton } from "@/components/insights/AccountAnalytics";
 import { useProject } from "@/components/common";
 
 type CampaignPerf = {
@@ -293,7 +293,6 @@ export default function Analytics() {
   const { projectId } = useParams() as { projectId: string };
   const proj = useProject(projectId).data;
   const [days, setDays] = React.useState(28);
-  const social = useQuery({ queryKey: ["analytics", projectId, "social"], queryFn: () => api.get<{ accounts: SocialAccount[] }>(p(projectId, "/analytics/social")) });
   const web = useQuery({
     queryKey: ["analytics", projectId, "web", days],
     queryFn: () => api.get<WebResponse>(p(projectId, `/analytics/web?days=${days}`)),
@@ -304,16 +303,24 @@ export default function Analytics() {
     <PageContainer>
       <PageHeader
         title="Analytics"
-        description="Post, social and website performance. Social and website metrics use different definitions and are kept apart."
+        description="What performs on your accounts, how your posts did, and your website. The AI uses all of it to plan your next posts."
         actions={
-          <Button asChild variant="ghost">
-            <Link to={`/projects/${projectId}/integrations`}>
-              <ChartLineUp size={14} weight="bold" /> Manage data sources
-            </Link>
-          </Button>
+          <div className="flex gap-2">
+            <Button asChild variant="ghost">
+              <Link to={`/projects/${projectId}/integrations`}>
+                <ChartLineUp size={14} weight="bold" /> Manage data sources
+              </Link>
+            </Button>
+            <PlanNextPostsButton projectId={projectId} />
+          </div>
         }
       />
       <div className="space-y-10">
+        <section>
+          <SectionIntro title="Your accounts">Accounts linked by URL: followers, engagement, quality and audience, plus every recent post graded against the account's own average, and which formats, hashtags and caption lengths work best.</SectionIntro>
+          <AccountAnalytics projectId={projectId} />
+        </section>
+
         <section>
           <SectionIntro title="Post performance">
             Every post you published, including the ones you posted yourself. Public metrics are collected automatically (every 20 minutes while a post is fresh); numbers only you can see come from your analytics screenshots or manual entry. Missing values show as —, never as zero.
@@ -321,10 +328,6 @@ export default function Analytics() {
           <PostPerformance projectId={projectId} />
         </section>
 
-        <section>
-          <SectionIntro title="Social accounts">Followers, reach and post metrics as reported by each platform's API. Engagement counts likes, comments, shares and saves; views and impressions are excluded.</SectionIntro>
-          <SocialSection projectId={projectId} accounts={social.data?.accounts} loading={social.isLoading} />
-        </section>
 
         <section>
           <SectionIntro title="Website">Sessions, users and conversions from your web analytics provider. These are visits to your site — not social reach.</SectionIntro>

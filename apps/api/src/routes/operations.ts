@@ -120,6 +120,23 @@ export default async function operationsRoutes(app: FastifyInstance) {
     }
     return { task: await createTask(req.project, body, "user") };
   });
+  /** One click: the AI studies what performs and prepares the next posts (with media) on the Ready to post page. */
+  app.post("/projects/:projectId/plan-next-posts", P, async (req) => {
+    const body = parse(z.object({ count: z.number().int().min(1).max(10).default(3), platforms: z.array(z.enum(["instagram", "tiktok", "x"])).optional(), notes: z.string().max(1000).optional() }), req.body ?? {});
+    const instruction = [
+      `Plan and prepare my next ${body.count} social posts${body.platforms?.length ? ` for ${body.platforms.join(", ")}` : ""}.`,
+      "1. Call get_account_analytics and get_post_performance. Identify what measurably performs best (post types, hooks/topics, hashtags, caption length, posting times) and what underperforms. Also check get_social_pulse for relevant trends.",
+      "2. Write a short brief in /workspace/next-posts.md: the evidence, and for each post the angle, format, platform and why it should work.",
+      "3. For each post: create_post_draft with a strong hook and platform-native caption, generate the media (generate_image or generate_video with a clear creative brief; review with analyze_media), attach it, run check_post_quality and fix issues.",
+      "4. send_to_ready_to_post for each finished post, spacing them at the best posting times you found (or now if there isn't enough data).",
+      "5. finish with a summary: what you learned from the analytics, the posts you prepared and when to post them.",
+      body.notes ? `Owner notes: ${body.notes}` : "",
+    ]
+      .filter(Boolean)
+      .join("\n");
+    return { task: await createTask(req.project, { instruction, agentType: "content_creation", autonomous: true }, "user") };
+  });
+
   app.get("/projects/:projectId/tasks/:taskId", P, async (req) => {
     const { taskId } = req.params as { taskId: string };
     const task = await prisma.task.findFirst({ where: { id: taskId, projectId: req.project.id }, include: { steps: { orderBy: { seq: "asc" } } } });

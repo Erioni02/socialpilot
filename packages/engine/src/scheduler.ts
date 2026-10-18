@@ -5,6 +5,7 @@ import { socialAdapter } from "@socialpilot/social";
 import { dispatchDueTargets } from "./content/publishing";
 import { dispatchDueAutomations } from "./automation/service";
 import { dispatchPostTracking } from "./content/manual";
+import { dispatchLinkedAccountSyncs } from "./analytics/accounts";
 import { enqueue } from "./infra/queue";
 import { getCredentials } from "./integrations/service";
 import { getAppCredentials } from "./infra/credentials";
@@ -62,6 +63,7 @@ async function cleanup() {
 let lastSlow = 0;
 let lastCleanup = 0;
 let lastTracking = 0;
+let lastAccounts = 0;
 
 /** Called every 30 seconds by the worker. All state lives in Postgres, so restarts lose nothing. */
 export async function schedulerTick() {
@@ -82,6 +84,11 @@ export async function schedulerTick() {
     if (Date.now() - lastTracking > 5 * 60_000) {
       lastTracking = Date.now();
       await dispatchPostTracking();
+    }
+    // Linked social accounts (by URL): stats + post feed on a budget-aware cadence.
+    if (Date.now() - lastAccounts > 30 * 60_000) {
+      lastAccounts = Date.now();
+      await enqueue("accounts.sync", {}, { dedupeKey: `accounts:${bucket(30 * 60_000)}`, maxAttempts: 1 });
     }
     if (Date.now() - lastCleanup > 6 * 3600_000) {
       lastCleanup = Date.now();

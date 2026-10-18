@@ -22,6 +22,8 @@ export const RAPID_MILESTONES_H = [24, 72, 168];
 export const rapidSettingsSchema = z.object({
   monthlyBudget: z.number().int().min(1).max(1_000_000).default(45),
   autoTracking: z.boolean().default(true),
+  /** Days between automatic refreshes of linked accounts (2 requests each: stats + post feed). */
+  accountRefreshDays: z.number().int().min(1).max(90).default(7),
 });
 export type RapidSettings = z.infer<typeof rapidSettingsSchema>;
 

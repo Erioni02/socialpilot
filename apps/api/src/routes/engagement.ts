@@ -20,6 +20,7 @@ import {
   relevance,
   sendReply,
   socialAnalytics,
+  linkedAccountsAnalytics,
   webAnalytics,
 } from "@socialpilot/engine";
 import { parse, userOf } from "../lib/http";
@@ -72,6 +73,8 @@ export default async function engagementRoutes(app: FastifyInstance) {
 
   // ───── Analytics ─────
   app.get("/projects/:projectId/analytics/social", P, async (req) => socialAnalytics(req.project));
+  /** Accounts linked by URL: stats, audience, follower history, post feed with grades, what works (types, hashtags, caption length). */
+  app.get("/projects/:projectId/analytics/accounts", P, async (req) => linkedAccountsAnalytics(req.project));
   app.get("/projects/:projectId/analytics/web", P, async (req) => {
     const q = parse(z.object({ days: z.coerce.number().int().min(1).max(365).default(28) }), req.query);
     return webAnalytics(req.project, q.days);

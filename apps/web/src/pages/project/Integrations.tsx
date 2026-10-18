@@ -1,4 +1,5 @@
 import * as React from "react";
+import { LinkedAccountsManager } from "@/components/projects/LinkedAccounts";
 import { useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -108,24 +109,16 @@ export default function Integrations() {
   const catalog = data?.catalog ?? [];
   const setupEntry = catalog.find((c) => c.id === setupFor);
   const keyEntry = catalog.find((c) => c.id === keyFor);
-  const connectedCount = catalog.reduce((n, c) => n + c.connections.filter((x) => x.status === "connected").length, 0);
+  const connectedCount = catalog.reduce((n, c) => n + c.connections.filter((x) => x.status === "connected" || x.status === "linked").length, 0);
 
   return (
     <PageContainer>
       <PageHeader
         eyebrow="Project"
         title="Integrations"
-        description="Connect accounts through their official APIs. Each connection shows exactly which operations work, based on granted scopes and the last live test."
+        description="Link your social accounts by URL for analytics, and connect website analytics, your repository and deployments. SocialPilot never posts to social networks."
         actions={data ? <Badge tone={connectedCount ? "green" : "gray"}>{connectedCount} connected</Badge> : null}
       />
-
-      {data && !data.publicBaseUrl && (
-        <div className="mb-6">
-          <SetupCallout title="PUBLIC_BASE_URL is not set">
-            Instagram and TikTok fetch media from a public HTTPS URL when publishing. Set <code className="font-mono text-[12px]">PUBLIC_BASE_URL</code> in the server environment to a URL those platforms can reach (for example a tunnel or your deployed API). X publishing and all read operations work without it.
-          </SetupCallout>
-        </div>
-      )}
 
       {error ? (
         <SetupCallout tone="red" title="Could not load integrations">
@@ -139,7 +132,11 @@ export default function Integrations() {
         </div>
       ) : (
         <div className="space-y-10">
-          {KINDS.map((k) => {
+          <section>
+            <SectionTitle>Social accounts</SectionTitle>
+            <LinkedAccountsManager projectId={projectId} />
+          </section>
+          {KINDS.filter((k) => k.kind !== "social").map((k) => {
             const entries = catalog.filter((c) => c.kind === k.kind);
             if (!entries.length) return null;
             return (
@@ -158,7 +155,6 @@ export default function Integrations() {
                     />
                   ))}
                 </div>
-                {k.kind === "social" && <PublicProfileCard projectId={projectId} />}
               </section>
             );
           })}
@@ -591,50 +587,6 @@ function TikTokConfig({ projectId, conn }: { projectId: string; conn: Connection
         <p className="text-[12px] text-muted flex-1 min-w-[220px]">Used when a post doesn't set its own. Until TikTok audits your app, every post is forced to private (SELF_ONLY) regardless of this setting.</p>
       </div>
     </ConfigBlock>
-  );
-}
-
-function PublicProfileCard({ projectId }: { projectId: string }) {
-  const qc = useQueryClient();
-  const [url, setUrl] = React.useState("");
-  const add = useMutation({
-    mutationFn: () => api.post<{ note: string }>(p(projectId, "/integrations/public-profile"), { url }),
-    onSuccess: (r) => {
-      setUrl("");
-      toast.success("Public profile added", { description: r.note });
-      qc.invalidateQueries({ queryKey: ["integrations", projectId] });
-    },
-    onError: (e) => toastError(e),
-  });
-  return (
-    <Card className="mt-4 px-5 py-4">
-      <div className="flex items-start gap-3">
-        <div className="h-9 w-9 rounded-lg border border-line bg-canvas flex items-center justify-center text-muted shrink-0">
-          <LinkSimple size={16} weight="bold" />
-        </div>
-        <div className="flex-1 min-w-0">
-          <h3 className="text-[13.5px] font-semibold text-ink">Add a public profile URL</h3>
-          <p className="text-[12.5px] text-muted mt-0.5">
-            Not ready to connect? Paste a public Instagram, TikTok or X profile so the AI can reference it. This grants <span className="text-ink font-medium">no API access</span> — no analytics, publishing or comments.
-          </p>
-          <form
-            className="mt-3 flex flex-wrap gap-2"
-            onSubmit={(e) => {
-              e.preventDefault();
-              if (url.trim().length >= 3) add.mutate();
-            }}
-          >
-            <div className="relative flex-1 min-w-[220px]">
-              <Globe size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-faint" />
-              <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://x.com/yourbrand" className="pl-8" />
-            </div>
-            <Button type="submit" loading={add.isPending} disabled={url.trim().length < 3}>
-              Add profile
-            </Button>
-          </form>
-        </div>
-      </div>
-    </Card>
   );
 }
 

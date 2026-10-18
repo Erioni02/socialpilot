@@ -1,52 +1,21 @@
 # Integrations: setup and capabilities
 
-Every OAuth integration needs a developer app owned by you. Add its client ID and secret in **Settings → Developer apps** (stored encrypted per user) or in `.env`. Each provider's redirect URI is:
-
-```
-${API_PUBLIC_URL}/api/oauth/<provider>/callback
-```
-
-With the defaults that is `http://localhost:4000/api/oauth/<provider>/callback`. The exact URI is shown with a copy button on the Integrations page. Some providers reject `http://localhost`. In that case, run the API behind HTTPS (a tunnel or your deployed domain) and set `API_PUBLIC_URL` to match.
-
-**Media publishing needs a public URL.** Instagram (all media) and TikTok (photo posts) download media from a URL. Set `PUBLIC_BASE_URL` to an HTTPS address where `/public/media/*` on the API is reachable. Those links are HMAC-signed and expire after 6 hours.
-
-After connecting, SocialPilot calls the provider's read endpoints and stores per-operation **connection test results**. The capability registry (`packages/shared/src/capabilities.ts`) combined with your granted scopes decides what the AI may attempt. Unsupported operations come back to the agent and the UI with the reason and an alternative.
+OAuth integrations (GA4, GitHub) need a developer app owned by you. Add its client ID and secret in **Settings → Developer apps** (stored encrypted per user) or in `.env`. Each provider's redirect URI is `${API_PUBLIC_URL}/api/oauth/<provider>/callback`. The exact URI is shown with a copy button on the Integrations page. Social accounts don't use OAuth: they're linked by URL (see below).
 
 ---
 
-## Instagram (Instagram API with Instagram Login)
+## Social accounts (Instagram, TikTok, X): linked by URL
 
-- **Scopes:** `instagram_business_basic`, `instagram_business_content_publish`, `instagram_business_manage_comments`, `instagram_business_manage_insights`
-- **Setup:**
-  1. developers.facebook.com → Create app (Business) → add **Instagram** → *API setup with Instagram login*.
-  2. Add the redirect URI under *Business login settings*.
-  3. Copy the **Instagram App ID / Secret** (not the Facebook App ID) into SocialPilot.
-  4. In development mode, add your account as an **Instagram Tester** and accept the invite in the Instagram app.
-  5. For accounts that aren't testers: App Review for each permission, plus Business Verification.
-- **Requires:** a Business or Creator account.
-- **Supported:** profile, followers, reach/views/interactions insights, media list, image/carousel/Reel publishing (JPEG images; container flow with resumable state), comments and replies.
-- **Not supported:** text-only posts (use an image), native scheduling (SocialPilot schedules), mentions (webhooks for approved apps only).
-- **Limits:** 100 API-published posts per 24h. Long-lived tokens (60 days) are refreshed automatically by the worker.
+SocialPilot **never posts and never logs in** to social networks. In a project, open **Integrations → Social accounts** (or the setup wizard) and paste the profile link, e.g. `https://www.instagram.com/yourbrand`, `https://www.tiktok.com/@yourbrand` or `https://x.com/yourbrand`. Social profiles found on your website can be linked with one click. No developer apps, OAuth or app review are needed.
 
-## TikTok (Login Kit + Content Posting API)
+What a linked account gives you (Analytics → **Your accounts**):
 
-- **Scopes:** `user.info.basic`, `user.info.profile`, `user.info.stats`, `video.list`, `video.publish`, `video.upload`
-- **Setup:**
-  1. developers.tiktok.com → create app → add **Login Kit** and **Content Posting API** → enable **Direct Post**.
-  2. Add the redirect URI. Request the scopes above.
-  3. For photo posts, verify the domain or URL prefix of `PUBLIC_BASE_URL`.
-  4. Submit for audit. **Unaudited apps can only post privately (`SELF_ONLY`) for up to 5 users.**
-- **Supported:** profile stats, video list with metrics, video upload (`FILE_UPLOAD`, chunked), photo posts (`PULL_FROM_URL`), publish status polling. Privacy level is chosen per post from the creator's allowed options.
-- **Not supported:** comments and mentions. TikTok exposes no comments API to third-party apps, so the inbox shows a manual handoff to TikTok Studio.
+- With a **RapidAPI key** (Instagram Statistics API): followers and follower history, average engagement rate, quality score, fake followers, audience demographics, and the account's posts from the last 60 days. Each post has views, likes, comments, shares, engagement rate and a **performance grade** (A+…D against the account's own similar posts). You also see which **post formats, hashtags and caption lengths** perform best. Accounts refresh automatically every 7 days (2 requests each, within your monthly budget) or on demand with *Refresh*.
+- Without it: posts you publish and link are still tracked for free (TikTok views/likes/comments/shares/saves, X likes/replies), and TikTok follower counts are captured from your video pages.
 
-## X (API v2, OAuth 2.0 Authorization Code + PKCE)
+**Posting:** you post yourself from **Ready to post**. *Plan for later* in the post editor puts a post there at its planned time, and agents use `send_to_ready_to_post`. Old API-scheduled posts automatically become Ready-to-post items. The comment inbox needed API access to your accounts, so it's no longer part of the app.
 
-- **Scopes:** `tweet.read`, `tweet.write`, `users.read`, `offline.access`, `media.write`
-- **Setup:**
-  1. developer.x.com → project and app → *User authentication settings*: OAuth 2.0, type "Web App, Automated App or Bot", permissions **Read and write**.
-  2. Add the callback URI. Copy the **OAuth 2.0 Client ID and Secret**.
-  3. Make sure your API access plan covers what you need. Posting is widely available, but **reading timelines, mentions and metrics requires paid access or pay-per-use credits**. Without it those calls return a provider error that SocialPilot shows on the integration card.
-- **Supported:** posts, threads (resumable: a retry continues from the last posted part), images (up to 4) and video (chunked v2 upload), public metrics, mentions and replies.
+**Plan my next posts** (Analytics): the AI reads your account analytics (what formats, hooks, hashtags and caption lengths perform), your posts' results and current trends. It then writes and illustrates the next posts and puts them on Ready to post at your best posting times, with a brief explaining the evidence in `/workspace/next-posts.md`.
 
 ## Google Analytics 4
 

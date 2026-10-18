@@ -440,7 +440,7 @@ export function ManualPublishDialog({ projectId, target, open, onOpenChange }: {
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
         title={`Publish manually on ${target ? PLATFORM_LABEL[target.platform] ?? target.platform : ""}`}
-        description="This target can't be published through the API. Copy the exact text below, post it yourself, then record it here."
+        description="SocialPilot doesn't post for you. Copy the exact text below, post it yourself, then paste the post link so its performance is tracked in Analytics."
         className="max-w-xl"
         footer={
           <>
@@ -598,8 +598,8 @@ export function ScheduleDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
-        title={reschedule ? "Reschedule post" : "Schedule post"}
-        description="The post runs through the quality check first. Scheduling as yourself is direct; posts scheduled by agents or automations wait for approval when your project policy requires it."
+        title={reschedule ? "Change planned time" : "Plan post"}
+        description="The post runs through the quality check first. At the planned time it appears on Ready to post with platform-ready media and the caption — SocialPilot never posts for you."
         footer={
           result ? (
             <Button variant="primary" onClick={() => onOpenChange(false)}>

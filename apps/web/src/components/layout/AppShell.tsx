@@ -41,7 +41,6 @@ const PROJECT_NAV = [
   { to: "campaigns", label: "Campaigns", icon: Megaphone },
   { to: "calendar", label: "Calendar", icon: CalendarBlank },
   { to: "ready", label: "Ready to post", icon: PaperPlaneTilt, badge: "ready" },
-  { to: "inbox", label: "Inbox", icon: ChatsCircle },
   { to: "analytics", label: "Analytics", icon: ChartLineUp },
   { to: "website", label: "Website", icon: Globe },
   { to: "agents", label: "Agents & tasks", icon: Robot },

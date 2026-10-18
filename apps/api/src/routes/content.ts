@@ -13,6 +13,7 @@ import {
   emit,
   enqueue,
   markManualPublished,
+  markPosted,
   planSlot,
   qualityCheck,
   renderPlatformText,
@@ -159,10 +160,8 @@ export default async function contentRoutes(app: FastifyInstance) {
   app.post("/projects/:projectId/posts/:postId/publish-now", P, async (req) => {
     const { postId } = req.params as { postId: string };
     const body = parse(z.object({ platforms: z.array(z.enum(SOCIAL_PLATFORMS)).optional() }), req.body);
-    const r = await schedulePost(req.project, postId, { scheduledAt: new Date(), platforms: body.platforms }, userActor(req));
-    const targets = await prisma.postTarget.findMany({ where: { postId, status: "scheduled" } });
-    for (const t of targets) await enqueue("publish.target", { targetId: t.id }, { projectId: req.project.id, dedupeKey: `publish:${t.id}:now` });
-    return r;
+    // No API posting: "now" puts the post on the Ready to post desk immediately.
+    return schedulePost(req.project, postId, { scheduledAt: new Date(), platforms: body.platforms }, userActor(req));
   });
   app.post("/projects/:projectId/posts/:postId/unschedule", P, async (req) => {
     const { postId } = req.params as { postId: string };
@@ -186,7 +185,9 @@ export default async function contentRoutes(app: FastifyInstance) {
   app.post("/projects/:projectId/targets/:targetId/manual-published", P, async (req) => {
     const { targetId } = req.params as { targetId: string };
     const { url } = parse(z.object({ url: z.string().url().optional() }), req.body);
-    await markManualPublished(req.project, targetId, url, userOf(req).id);
+    // With a link, use the validated flow so the post is tracked in Analytics.
+    if (url) await markPosted(req.project, targetId, { url }, userOf(req).id);
+    else await markManualPublished(req.project, targetId, undefined, userOf(req).id);
     return { ok: true };
   });
 

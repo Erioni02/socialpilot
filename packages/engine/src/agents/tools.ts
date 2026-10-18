@@ -27,7 +27,8 @@ import { applyImageOp, applyVideoOp, createAsset, generateImages, generateVideo,
 import { draftReply, feedbackSummary, sendReply } from "../inbox/service";
 import { generateOpportunities, listDiscoverItems, refreshDiscover } from "../discover/service";
 import { listPulse } from "../intel/pulse";
-import { postedPerformance, readyToPost } from "../content/manual";
+import { postedPerformance, readyToPost, sendToDesk } from "../content/manual";
+import { linkedAccountsAnalytics } from "../analytics/accounts";
 import { getSkill, SKILLS } from "./skills";
 import { listDeployments, listRepoFiles, proposeCodeChange, readRepoFile, requestMerge, requestPromotion, submitCodeChange } from "../website/code";
 import { runWebsiteAudit } from "../website/audit";
@@ -303,6 +304,44 @@ export const TOOLS: AgentTool[] = [
     },
   },
   {
+    name: "get_account_analytics",
+    description: "Analytics of the project's linked social accounts: followers and history, engagement rate, quality score, audience demographics, and the account's recent posts with views/likes/comments/shares, ER and performance grade (a_plus…d vs. the account's own average), plus which post types, hashtags and caption lengths perform best. Use this to decide what to make next.",
+    permission: null,
+    schema: z.object({ platform: z.enum(["all", "instagram", "tiktok", "x"]).default("all") }),
+    jsonSchema: obj({ platform: { type: "string", enum: ["all", "instagram", "tiktok", "x"] } }),
+    async run(args, ctx) {
+      const r = await linkedAccountsAnalytics(ctx.project);
+      const accounts = r.accounts.filter((a) => args.platform === "all" || a.platform === args.platform);
+      if (!accounts.length) return { accounts: [], note: "No social accounts linked. The owner can link them in Integrations by pasting the profile URL." };
+      return {
+        accounts: accounts.map((a) => ({
+          platform: a.platform,
+          handle: a.handle,
+          lastSyncAt: a.lastSyncAt,
+          stats: a.stats,
+          followerChange: a.followerChange,
+          audience: a.audience ? { countries: a.audience.countries.slice(0, 5), genders: a.audience.genders, ages: a.audience.ages, audienceTypes: a.audience.audienceTypes, fakeFollowersPct: a.audience.fakeFollowersPct } : null,
+          whatWorks: a.feed ? { medianER: a.feed.medianER, medianViews: a.feed.medianViews, postTypes: a.feed.types, hashtags: a.feed.hashtags, captionLength: a.feed.textLength } : null,
+          bestPosts: a.feed?.top.map((p) => ({ url: p.url, date: p.date, type: p.type, views: p.views, likes: p.likes, comments: p.comments, shares: p.shares, er: p.er, grade: p.grade, hashtags: p.hashtags })) ?? [],
+          weakestPosts: a.feed?.bottom.map((p) => ({ url: p.url, type: p.type, er: p.er, grade: p.grade })) ?? [],
+          note: a.feed ? undefined : (a.lastError ?? "Post-level data appears after the first statistics sync (needs a RapidAPI key)."),
+        })),
+      };
+    },
+  },
+  {
+    name: "send_to_ready_to_post",
+    description: "Put a finished post on the owner's Ready to post page now (or at an ISO time) for the given platforms. Run check_post_quality first; attach generated media to the post before sending.",
+    permission: "schedule",
+    schema: z.object({ postId: z.string(), platforms: z.array(z.enum(SOCIAL_PLATFORMS)).optional(), at: z.string().optional() }),
+    jsonSchema: obj({ postId: str("Post id"), platforms: arr(platformEnum, "Platforms"), at: str("Optional ISO time when it should be posted") }, ["postId"]),
+    async run(args, ctx) {
+      const at = args.at ? new Date(args.at) : undefined;
+      if (at && isNaN(at.getTime())) throw badRequest("Invalid time");
+      return sendToDesk(ctx.project, args.postId, { platforms: args.platforms, at }, ctx.actor);
+    },
+  },
+  {
     name: "load_skill",
     description: `Load an expert marketing/creative playbook into context. Available: ${SKILLS.map((s) => s.name).join(", ")}.`,
     permission: null,
@@ -510,7 +549,7 @@ export const TOOLS: AgentTool[] = [
   },
   {
     name: "schedule_post",
-    description: "Schedule a post for publishing at an ISO time. Publishing requires human approval unless the project policy explicitly allows autonomous publishing.",
+    description: "Plan a finished post for a time (ISO). SocialPilot never posts: at that time it appears on the owner's Ready to post page with platform-ready media and the caption, and the owner posts it manually.",
     permission: "schedule",
     schema: z.object({ postId: z.string(), scheduledAt: z.string(), platforms: z.array(z.enum(SOCIAL_PLATFORMS)).optional() }),
     jsonSchema: obj({ postId: str("Post id"), scheduledAt: str("ISO 8601 date-time"), platforms: arr(platformEnum, "Subset of platforms") }, ["postId", "scheduledAt"]),

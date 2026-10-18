@@ -13,6 +13,7 @@ import { aiJson, hasTextAI } from "../ai/service";
 import { recordOwnerMetrics, recordSourcedMetrics, snapshotUrl } from "../intel/service";
 import { dueRapidMilestone, getRapidSettings, rapidPostMetrics, rapidStatus } from "../intel/rapidapi";
 import { getApiKey } from "../infra/credentials";
+import { captureFreeFollowers } from "../analytics/accounts";
 import { refreshPostStatus, schedulePost } from "./publishing";
 import { renderPlatformText } from "./service";
 import type { Actor } from "../projects/context";
@@ -249,6 +250,8 @@ export async function trackPostedTarget(payload: { targetId: string }) {
   const r = await snapshotUrl(project.ownerId, project.id, t.remoteUrl);
   let ok = r.outcome.status === "ok" || r.outcome.status === "partial";
   let note: string | null = ok ? null : (r.outcome.message ?? null);
+  const author = r.outcome.result?.author;
+  if (author?.profile.handle) await captureFreeFollowers(project.id, t.platform, author.profile.handle, author.metrics.followers?.value);
   const rapidDone = ((state.rapidMilestones as number[]) ?? []).slice();
   // Instagram (no public data) and X (no public views): live numbers from RapidAPI at 1, 3 and 7 days, within budget.
   if (r.entityId && (t.platform === "instagram" || t.platform === "x") && t.publishedAt && (await getApiKey(project.ownerId, "rapidapi")) && (await getRapidSettings(project.ownerId)).autoTracking) {

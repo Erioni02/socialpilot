@@ -78,7 +78,8 @@ const prettify = (r: { name: string; percent: number }) => ({ ...r, name: r.name
 export function audienceFrom(d: any): AudienceInsights {
   return {
     qualityScore: num(d.qualityScore),
-    fakeFollowersPct: num(d.pctFakeFollowers),
+    // 0 with no analyzed audience means "unknown", not "no fake followers".
+    fakeFollowersPct: num(d.audienceSeverity) === 0 ? undefined : num(d.pctFakeFollowers),
     avgEngagementRate: num(d.avgER),
     avgInteractions: num(d.avgInteractions),
     avgLikes: num(d.avgLikes),

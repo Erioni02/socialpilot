@@ -275,11 +275,11 @@ function DeveloperAppsTab() {
         <Skeleton className="h-64" />
       </div>
     );
-  const ids = Object.keys(meta.integrations).filter((k) => meta.integrations[k].authType === "oauth2");
+  const ids = Object.keys(meta.integrations).filter((k) => meta.integrations[k].authType === "oauth2" && meta.integrations[k].kind !== "social");
   return (
     <div className="space-y-4">
       <p className="text-[12.5px] text-muted max-w-3xl">
-        OAuth connections need your own developer app on each platform. Credentials are encrypted and never shown again; only a short hint is displayed. They are verified when you connect an account.
+        Google Analytics and GitHub connections need your own developer app. Social accounts don't — they're linked by URL. Credentials are encrypted and never shown again; only a short hint is displayed. They are verified when you connect an account.
       </p>
       <div className="grid gap-4 lg:grid-cols-2 items-start">
         {ids.map((id) => (

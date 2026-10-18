@@ -2,7 +2,7 @@
 
 A project-based AI operating system for running online businesses. **One project = one business + its website + social accounts + content + analytics + AI agents + automations.**
 
-Create a project from a URL (e.g. `https://vibejudge.app`). SocialPilot crawls the public site and proposes a business profile. You then connect Instagram, TikTok and X through official OAuth, plus GA4 or Plausible, GitHub and Vercel. From there, AI agents do real work through controlled backend tools: research sourced trends, generate and edit media, draft and schedule posts, triage comments, audit the website and open pull requests. Your approval rules apply throughout.
+Create a project from a URL (e.g. `https://vibejudge.app`). SocialPilot crawls the public site and proposes a business profile. You link your Instagram, TikTok and X accounts by pasting their URLs (read-only analytics; SocialPilot never posts), and connect GA4 or Plausible, GitHub and Vercel. From there, AI agents do real work through controlled backend tools: study what performs, research sourced trends, generate and edit media, prepare finished posts on the Ready to post page for you to publish, audit the website and open pull requests. Your approval rules apply throughout.
 
 ## What's in the box
 
@@ -10,10 +10,10 @@ Create a project from a URL (e.g. `https://vibejudge.app`). SocialPilot crawls t
 |---|---|
 | Projects & wizard | Multiple isolated projects. 8-step setup: name → URL → live website analysis → editable profile → integrations → AI providers → permissions → launch. |
 | Command center | Website status (live check and latest audit), real analytics, followers, upcoming and published posts, inbox, trends, opportunities, running tasks, health and budget. A connect prompt appears wherever data is missing. |
-| Integrations | Official OAuth for Instagram (Instagram Login), TikTok (Login Kit + Content Posting), X (OAuth 2.0 PKCE), GA4 (Google OAuth) and GitHub. Token-based connections for Plausible and Vercel. Encrypted tokens, refresh, revocation, connection tests and a capability registry. |
+| Integrations | Social accounts linked by URL (no OAuth, no posting) with account and post analytics. GA4 (Google OAuth), GitHub, Plausible and Vercel connections with encrypted tokens and connection tests. |
 | AI Workspace | Media library with versions. Real Sharp edits (crop, resize, presets, format, brand overlays). AI edit, background removal and variations through OpenAI/Replicate/Stability. Video generation through Replicate. FFmpeg trim, reframe, subtitles (SRT or Whisper), concat, thumbnails and compression. Storyboards. Command bar for agents. |
 | Content & campaigns | Multi-platform post editor with per-platform variants, threads, previews, AI assist (rewrite, translate, hooks, hashtags, CTA), quality and brand checks, and version history. AI campaign plans that become real drafts and images. |
-| Publishing & calendar | Timezone-aware scheduling, approvals, recurring queues, persistent jobs, retries, duplicate-safe publishing (atomic claim plus resumable provider state), status polling, published URLs, and a manual handoff where APIs can't post. |
+| Ready to post & calendar | Timezone-aware planning; at the planned time each post appears on Ready to post with platform-ready media, caption and checklist. You post it and paste the link; its performance is then tracked automatically. |
 | Inbox | Instagram comments and X mentions/replies, AI or keyword classification, escalation, reply drafts, approved replies, opt-in auto-replies, and a feedback summary. |
 | Analytics | Social metrics, GA4/Plausible web analytics (kept separate), UTM campaign attribution and PageSpeed history. Insights keep measured facts separate from AI hypotheses. |
 | Website | Evidence-based audit (SEO, accessibility, performance, links, conversion, security, PageSpeed). Repository browser. AI or manual code changes with diffs, pushed to new branches as PRs, with checks and preview URLs. Merges and production promotions are approval-gated, with rollback. |
@@ -74,7 +74,7 @@ Without Redis, the worker uses a durable Postgres-backed queue. Set `REDIS_URL` 
 
 ## What you must authorize
 
-The integration code, OAuth flows and configuration UI are complete. Each platform needs developer credentials, and some need app review or a paid tier. See [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) for the step-by-step setup for Instagram, TikTok, X, GA4, GitHub, Plausible and Vercel, including the exact redirect URIs. Nothing is shown as connected until a real OAuth exchange and connection test succeed.
+The integration code, OAuth flows and configuration UI are complete. Each platform needs developer credentials, and some need app review or a paid tier. See [docs/INTEGRATIONS.md](docs/INTEGRATIONS.md) for linking social accounts by URL and the step-by-step setup for GA4, GitHub, Plausible and Vercel, including the exact redirect URIs. Nothing is shown as connected until a real OAuth exchange and connection test succeed.
 
 ## Documentation
 

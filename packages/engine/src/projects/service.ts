@@ -163,7 +163,7 @@ export async function startBrandAnalysis(userId: string, project: Project, url?:
 /** Feature readiness used by the dashboard and wizard to show what needs setup (never fictional data). */
 export async function projectReadiness(userId: string, project: Project) {
   const integrations = await prisma.integration.findMany({ where: { projectId: project.id, status: { not: "disconnected" } } });
-  const has = (p: string) => integrations.some((i) => i.provider === p && i.status === "connected");
+  const has = (p: string) => integrations.some((i) => i.provider === p && (i.status === "connected" || ((i.kind === "social") && (i.status === "linked" || i.status === "public_only"))));
   const textAI = await hasTextAI(userId, project);
   const imageAI = !!((await getApiKey(userId, "byteplus")) || (await getApiKey(userId, "openai")) || (await getApiKey(userId, "replicate")) || (await getApiKey(userId, "stability")));
   const customImage = (await listCustomProviders(userId)).some((c) => c.capabilities.includes("image"));

@@ -304,21 +304,6 @@ export default function PostEditor() {
     },
     onError: (e) => toastError(e),
   });
-  const [publishOpen, setPublishOpen] = React.useState(false);
-  const [publishPlatforms, setPublishPlatforms] = React.useState<string[]>([]);
-  const publishNow = useMutation({
-    mutationFn: () => api.post<{ needsApproval: boolean; targets: { platform: string; status: string; lastError?: string }[] }>(p(projectId, `/posts/${postId}/publish-now`), { platforms: publishPlatforms }),
-    onSuccess: (r) => {
-      invalidate();
-      setPublishOpen(false);
-      const manual = r.targets.filter((t) => t.status === "manual");
-      toast.success(manual.length ? `Publishing started — ${manual.map((t) => PLATFORM_LABEL[t.platform]).join(", ")} need a manual handoff` : "Publishing started");
-    },
-    onError: (e: any) => {
-      toastError(e);
-      if (Array.isArray(e?.details)) e.details.forEach((c: any) => c?.message && toast.error(c.message));
-    },
-  });
   const sendToReady = useMutation({
     mutationFn: () => api.post(p(projectId, `/posts/${postId}/send-to-ready`), { platforms: form?.platforms }),
     onSuccess: () => {
@@ -451,7 +436,7 @@ export default function PostEditor() {
           )}
           {canSchedule && (
             <Button variant="secondary" disabled={dirty} onClick={() => setScheduleOpen(true)}>
-              <CalendarPlus size={14} /> Schedule
+              <CalendarPlus size={14} /> Plan for later
             </Button>
           )}
           {canUnschedule && (
@@ -462,18 +447,6 @@ export default function PostEditor() {
           {canSchedule && (
             <Button variant="secondary" disabled={dirty || !form.platforms.length} loading={sendToReady.isPending} onClick={() => sendToReady.mutate()}>
               <DownloadSimple size={14} /> Send to Ready to post
-            </Button>
-          )}
-          {canSchedule && (
-            <Button
-              variant="secondary"
-              disabled={dirty || !form.platforms.length}
-              onClick={() => {
-                setPublishPlatforms(post.platforms);
-                setPublishOpen(true);
-              }}
-            >
-              <PaperPlaneTilt size={14} weight="fill" /> Publish now
             </Button>
           )}
           <Button variant="primary" disabled={!dirty || locked} loading={save.isPending} onClick={doSave}>
@@ -896,31 +869,6 @@ export default function PostEditor() {
 
       <MediaPickerDialog projectId={projectId} open={pickerOpen} onOpenChange={setPickerOpen} initial={form.mediaAssetIds} onPick={(ids) => update({ mediaAssetIds: ids })} />
       <ScheduleDialog projectId={projectId} post={post} defaultTz={tz} open={scheduleOpen} onOpenChange={setScheduleOpen} />
-      <ConfirmDialog
-        open={publishOpen}
-        onOpenChange={setPublishOpen}
-        title="Publish now?"
-        description="The post goes out immediately on the selected platforms after passing the quality check. Platforms that aren't connected or don't support this post type become manual handoffs."
-        confirmLabel="Publish now"
-        loading={publishNow.isPending}
-        onConfirm={() => publishNow.mutate()}
-      >
-        <div className="flex flex-wrap gap-3">
-          {post.platforms.map((pl) => (
-            <Checkbox
-              key={pl}
-              checked={publishPlatforms.includes(pl)}
-              onCheckedChange={(v) => setPublishPlatforms((s) => (v ? [...s, pl] : s.filter((x) => x !== pl)))}
-              label={
-                <span className="inline-flex items-center gap-1.5">
-                  <PlatformIcon platform={pl} size={13} /> {PLATFORM_LABEL[pl]}
-                </span>
-              }
-            />
-          ))}
-        </div>
-        <p className="text-[12px] text-muted mt-3">You're publishing as yourself, so no approval is required. Agent-initiated publishing follows the project's approval policy.</p>
-      </ConfirmDialog>
       <ConfirmDialog
         open={cancelOpen}
         onOpenChange={setCancelOpen}

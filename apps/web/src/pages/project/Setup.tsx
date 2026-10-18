@@ -1,4 +1,5 @@
 import * as React from "react";
+import { LinkedAccountsManager } from "@/components/projects/LinkedAccounts";
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -400,7 +401,7 @@ type CatalogEntry = {
 };
 
 const KIND_INFO: Record<CatalogEntry["kind"], { title: string; enables: string }> = {
-  social: { title: "Social accounts", enables: "Metrics, publishing, scheduling and inbox replies." },
+  social: { title: "Social accounts", enables: "Account and post analytics (linked by URL)." },
   analytics: { title: "Web analytics", enables: "Sessions, users, conversions and campaign attribution." },
   repository: { title: "Code repository", enables: "Website code changes as pull requests (never direct to main)." },
   deployment: { title: "Deployments", enables: "Preview and production deployment status, promotion with approval." },
@@ -527,60 +528,17 @@ function IntegrationRow({ entry, projectId }: { entry: CatalogEntry; projectId: 
   );
 }
 
-function PublicProfileForm({ projectId, suggestions }: { projectId: string; suggestions: { platform: string; url: string }[] }) {
-  const qc = useQueryClient();
-  const [url, setUrl] = React.useState("");
-  const add = useMutation({
-    mutationFn: (u: string) => api.post<{ note: string }>(p(projectId, "/integrations/public-profile"), { url: u }),
-    onSuccess: (r) => {
-      setUrl("");
-      toast.success("Public profile added", { description: r.note });
-      qc.invalidateQueries({ queryKey: ["integrations", projectId] });
-    },
-    onError: (e) => toastError(e),
-  });
-  const social = suggestions.filter((s) => ["instagram", "tiktok", "x"].includes(s.platform));
-  return (
-    <Card>
-      <CardHeader icon={<LinkSimple size={15} weight="bold" />} title="Add public profile URLs" description="Lets agents reference your accounts by handle. Public URLs grant no API access: no metrics, publishing or comments." />
-      <CardBody className="space-y-3">
-        <form
-          className="flex flex-col sm:flex-row gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            if (url.trim()) add.mutate(url.trim());
-          }}
-        >
-          <Input value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://x.com/yourbrand" />
-          <Button type="submit" loading={add.isPending && add.variables === url.trim()} disabled={!url.trim()}>
-            Add URL
-          </Button>
-        </form>
-        {social.length > 0 && (
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-[12px] text-muted">Found on your website:</span>
-            {social.map((s) => (
-              <button key={s.url} onClick={() => add.mutate(s.url)} className="inline-flex items-center gap-1.5 rounded-full border border-line px-2 py-0.5 text-[12px] text-ink-2 hover:border-line-strong hover:text-ink">
-                <PlatformIcon platform={s.platform} size={12} /> {s.url.replace(/^https?:\/\/(www\.)?/, "")}
-              </button>
-            ))}
-          </div>
-        )}
-      </CardBody>
-    </Card>
-  );
-}
-
 function IntegrationsStep({ projectId, auditId, onBack, onNext }: { projectId: string; auditId: string | null; onBack: () => void; onNext: () => void }) {
   const { data, isLoading } = useQuery({ queryKey: ["integrations", projectId], queryFn: () => api.get<{ catalog: CatalogEntry[]; publicBaseUrl: string | null }>(p(projectId, "/integrations")) });
   const analysis = useAnalysis(projectId, auditId);
   const suggestions = analysis.data?.profile?.socialLinks ?? analysis.data?.summary?.hints?.socialLinks ?? [];
-  const groups = (["social", "analytics", "repository", "deployment"] as const).map((k) => ({ kind: k, entries: (data?.catalog ?? []).filter((e) => e.kind === k) }));
+  const groups = (["analytics", "repository", "deployment"] as const).map((k) => ({ kind: k, entries: (data?.catalog ?? []).filter((e) => e.kind === k) }));
   return (
     <div className="space-y-5">
       <SetupCallout tone="blue" title="All optional">
-        SocialPilot works without any connections — you can draft content, generate media and audit the website. Connections unlock real metrics, publishing and code changes. Nothing is ever published without approval at this stage.
+        SocialPilot works without any connections — you can draft content, generate media and audit the website. Link your social accounts by URL so the AI can learn what performs; SocialPilot never posts — you post from Ready to post.
       </SetupCallout>
+      <LinkedAccountsManager projectId={projectId} suggestions={suggestions} />
       {isLoading ? (
         <Skeleton className="h-72" />
       ) : (
@@ -597,12 +555,6 @@ function IntegrationsStep({ projectId, auditId, onBack, onNext }: { projectId: s
           ) : null,
         )
       )}
-      {data && !data.publicBaseUrl && (
-        <SetupCallout title="Instagram and TikTok publishing need a public media URL">
-          Set PUBLIC_BASE_URL on the server to an HTTPS address those platforms can reach. Drafts and scheduling work without it.
-        </SetupCallout>
-      )}
-      <PublicProfileForm projectId={projectId} suggestions={suggestions} />
       <div className="flex justify-between gap-2">
         <Button variant="ghost" onClick={onBack}>
           <ArrowLeft size={13} /> Back
@@ -686,7 +638,7 @@ function LaunchStep({ project, readiness, policy, onBack }: { project: any; read
     { ok: readiness.ai?.text, label: "Text AI", detail: readiness.ai?.text ? "Agents, drafts, campaigns and replies can be generated." : "Agents and drafting need a text provider key.", fix: { to: `/projects/${id}/setup?step=6`, label: "Add key" } },
     { ok: readiness.ai?.image, label: "Image generation", detail: readiness.ai?.image ? "Generate and edit images." : "Needs a ByteDance (BytePlus), OpenAI, Replicate or Stability key.", fix: { to: `/projects/${id}/setup?step=6`, label: "Add key" } },
     { ok: readiness.ai?.video, label: "Video generation", detail: readiness.ai?.video ? "Generate short videos." : "Needs a Replicate key. FFmpeg editing works without it.", fix: { to: `/projects/${id}/setup?step=6`, label: "Add key" } },
-    ...socials.map(([pl, ok]) => ({ ok, label: PLATFORM_LABEL[pl] ?? pl, detail: ok ? "Metrics, publishing and inbox (per platform capabilities)." : "Not connected — content can still be drafted and exported.", fix: { to: `/projects/${id}/setup?step=5`, label: "Connect" } })),
+    ...socials.map(([pl, ok]) => ({ ok, label: PLATFORM_LABEL[pl] ?? pl, detail: ok ? "Linked — analytics are collected for the AI." : "Not linked — paste the profile URL so the AI can learn what performs.", fix: { to: `/projects/${id}/setup?step=5`, label: "Connect" } })),
     { ok: readiness.analytics, label: "Web analytics", detail: readiness.analytics ? "Sessions, users and conversions are measured." : "Connect GA4 or Plausible to measure traffic.", fix: { to: `/projects/${id}/setup?step=5`, label: "Connect" } },
     { ok: readiness.repository, label: "Code repository", detail: readiness.repository ? "Website changes can be proposed as pull requests." : "Connect GitHub to let agents propose code changes.", fix: { to: `/projects/${id}/setup?step=5`, label: "Connect" } },
     { ok: readiness.deployment, label: "Deployments", detail: readiness.deployment ? "Preview and production deployments tracked." : "Connect Vercel to follow deployments.", fix: { to: `/projects/${id}/setup?step=5`, label: "Connect" } },
