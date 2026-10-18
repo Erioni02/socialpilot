@@ -29,7 +29,7 @@ export function textProvider(provider: string, c: string | ProviderCredentials):
     case "nvidia":
       return nvidiaProvider(apiKey);
     case "ollama":
-      return ollamaProvider(baseUrl, apiKey);
+      return ollamaProvider(undefined, apiKey);
     case "anthropic":
       return anthropicProvider(apiKey);
     case "openai":
@@ -77,7 +77,7 @@ export async function testProvider(provider: string, c: string | ProviderCredent
     case "byteplus":
       return seedanceProvider(apiKey, baseUrl || undefined).test();
     case "ollama":
-      return ollamaProvider(baseUrl, apiKey).test();
+      return ollamaProvider(undefined, apiKey).test();
     case "nvidia":
     case "anthropic":
     case "openai":

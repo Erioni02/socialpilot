@@ -2,8 +2,6 @@ import { prisma, type Project } from "@socialpilot/db";
 import { AppError, SetupRequiredError } from "@socialpilot/core";
 import {
   completeJson,
-  listOllamaModels,
-  ollamaRoot,
   openaiProvider,
   imageProvider,
   textProvider,
@@ -57,28 +55,6 @@ async function firstConfigured(userId: string, order: string[]): Promise<Found |
     if (creds) return { provider: p, creds };
   }
   return null;
-}
-
-const ollamaCache = new Map<string, { at: number; models: Awaited<ReturnType<typeof listOllamaModels>> }>();
-/** Installed Ollama models (cached 60s). Used to pick a sensible default when none is configured. */
-async function ollamaDefault(baseUrl: string | undefined, apiKey: string | undefined, role: string): Promise<string> {
-  const key = `${ollamaRoot(baseUrl)}|${apiKey ? "k" : ""}`;
-  let hit = ollamaCache.get(key);
-  if (!hit || Date.now() - hit.at > 60_000) {
-    hit = { at: Date.now(), models: await listOllamaModels(baseUrl, apiKey) };
-    ollamaCache.set(key, hit);
-  }
-  const chat = hit.models.filter((m) => !/embed|bge|nomic|minilm/i.test(m.name));
-  const pick = role === "vision" ? chat.find((m) => m.vision) : chat[0];
-  if (!pick) {
-    throw new SetupRequiredError(
-      role === "vision"
-        ? 'No vision model is installed in Ollama. Run e.g. "ollama pull gemma3" or "ollama pull qwen2.5vl", or choose a model in Settings → AI providers → Ollama → Model & reasoning.'
-        : 'No models are installed in Ollama. Run e.g. "ollama pull llama3.2" (or "ollama pull qwen3" for tool calling).',
-      { kind: "ai_provider", provider: "ollama", link: "/settings?tab=ai" },
-    );
-  }
-  return pick.name;
 }
 
 /** Custom (user-added) providers that declare a capability, in the order they were added. */
@@ -151,12 +127,6 @@ export async function resolveTextAI(userId: string, project?: Pick<Project, "aiC
     const model = pick(() => customDefault(c, role));
     const price = c.pricing.inputPer1M != null || c.pricing.outputPer1M != null ? { input: c.pricing.inputPer1M, output: c.pricing.outputPer1M } : { input: 0, output: 0 };
     return { providerId: found.provider, model, role, reasoning, price, provider: openaiProvider(c.apiKey ?? "", { id: c.name, baseUrl: c.baseUrl, tokenParam: c.tokenParam }) as ReturnType<typeof textProvider> };
-  }
-  if (found.provider === "ollama") {
-    await validateBaseUrl(ollamaRoot(found.creds.baseUrl));
-    const settled = found.provider === rc.provider && rc.model ? rc.model : found.provider === cfg.textProvider && cfg.textModel && role === "text" ? cfg.textModel : ps.models[role];
-    const model = settled ?? (role !== "vision" ? ps.models.text : undefined) ?? (await ollamaDefault(found.creds.baseUrl, found.creds.apiKey || undefined, role));
-    return { providerId: found.provider, model, role, reasoning, price: { input: 0, output: 0 } as { input?: number; output?: number } | null, provider: textProvider("ollama", found.creds) };
   }
   const defaults = AI_PROVIDER_CATALOG[found.provider as keyof typeof AI_PROVIDER_CATALOG].defaultModels;
   const model = pick(() => defaults[role] ?? ps.models.text ?? defaults.text!);

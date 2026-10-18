@@ -1,8 +1,20 @@
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { prisma } from "@socialpilot/db";
 import { createProject, listCustomProviders, resolveImageAI, resolveTextAI, saveCustomProvider, textCost } from "../src";
 
-afterAll(async () => prisma.$disconnect());
+// Routing must not depend on keys in the developer's .env.
+const AI_ENV = ["NVIDIA_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "OLLAMA_API_KEY", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID", "BYTEPLUS_API_KEY", "REPLICATE_API_TOKEN", "STABILITY_API_KEY"];
+const saved: Record<string, string | undefined> = {};
+beforeAll(() => {
+  for (const k of AI_ENV) {
+    saved[k] = process.env[k];
+    delete process.env[k];
+  }
+});
+afterAll(async () => {
+  for (const k of AI_ENV) if (saved[k] !== undefined) process.env[k] = saved[k];
+  await prisma.$disconnect();
+});
 
 const user = () => prisma.user.create({ data: { email: `custom-${Date.now()}-${Math.random()}@example.test`, name: "C", passwordHash: "x" } });
 

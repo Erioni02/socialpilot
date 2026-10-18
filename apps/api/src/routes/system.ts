@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "@socialpilot/db";
 import { badRequest, config, redactString } from "@socialpilot/core";
 import { postpeerAccounts, postpeerBalance, socialcrawlBalance } from "@socialpilot/integrations";
-import { listNvidiaModels, listOllamaModels, ollamaRoot, testProvider } from "@socialpilot/ai";
+import { listNvidiaModels, listOllamaModels, testProvider } from "@socialpilot/ai";
 import { AI_PROVIDER_CATALOG, AGENT_LABELS, AUTONOMY_LABELS, CAPABILITY_REGISTRY, DATA_PROVIDER_CATALOG, INTEGRATION_CATALOG, PERMISSION_LABELS, providerCredentialSchema } from "@socialpilot/shared";
 import { audit, credentialStatus, getProviderCreds, validateBaseUrl, fetchCustomModels, listProviderSettings, saveProviderSettings, ffmpeg, getCustomProvider, listCustomProviders, resolveSecret, saveCredential, saveCustomProvider } from "@socialpilot/engine";
 import { CUSTOM_PROVIDER_PRESETS, isCustomProvider } from "@socialpilot/shared";
@@ -94,10 +94,7 @@ export default async function systemRoutes(app: FastifyInstance) {
     if (provider.startsWith("oauth:")) {
       if (!body.clientId || !body.clientSecret) throw badRequest("Client ID and client secret are required");
     } else if (!body.apiKey && !(AI_PROVIDER_CATALOG as Record<string, { keyOptional?: boolean }>)[provider]?.keyOptional) throw badRequest("API key is required");
-    if (provider === "ollama") {
-      body.baseUrl = ollamaRoot(body.baseUrl);
-      await validateBaseUrl(body.baseUrl); // local URLs only when ALLOW_LOCAL_AI_ENDPOINTS is on
-    }
+    if (provider === "ollama") body.baseUrl = undefined; // Ollama Cloud only
     if (provider === "cloudflare" && !body.accountId) throw badRequest("Cloudflare also needs your account ID");
     const user = userOf(req);
     await saveCredential(user.id, provider, { apiKey: body.apiKey, clientId: body.clientId, clientSecret: body.clientSecret, accountId: body.accountId, baseUrl: body.baseUrl }, body.label);
@@ -137,7 +134,6 @@ export default async function systemRoutes(app: FastifyInstance) {
     let message = "";
     try {
       if (provider in AI_PROVIDER_CATALOG) {
-        if (provider === "ollama") await validateBaseUrl(ollamaRoot(secret.baseUrl));
         message = await testProvider(provider, { apiKey: secret.apiKey ?? "", accountId: secret.accountId, baseUrl: secret.baseUrl });
       }
       else if (provider === "socialcrawl") {
@@ -179,12 +175,11 @@ export default async function systemRoutes(app: FastifyInstance) {
   /** Live list of models on NVIDIA API Catalog (public endpoint), used for model pickers. */
   app.get("/providers/nvidia/models", { preHandler: app.requireAuth }, async () => ({ models: await listNvidiaModels() }));
 
-  /** Models installed on the configured Ollama server. */
+  /** Models available on Ollama Cloud for this key. */
   app.get("/providers/ollama/models", { preHandler: app.requireAuth }, async (req) => {
     const creds = await getProviderCreds(userOf(req).id, "ollama");
-    if (!creds) throw badRequest("Set up Ollama first");
-    await validateBaseUrl(ollamaRoot(creds.baseUrl));
-    const models = await listOllamaModels(creds.baseUrl, creds.apiKey || undefined);
+    if (!creds) throw badRequest("Add your Ollama Cloud API key first");
+    const models = await listOllamaModels(undefined, creds.apiKey);
     return { models: models.map((m) => m.name), details: models };
   });
 

@@ -88,7 +88,7 @@ export function ProviderModelSettings({
               <Input
                 list={listId}
                 value={models_[role] ?? ""}
-                placeholder={defaults[role] ?? (isText ? defaults.text : undefined) ?? (providerId === "ollama" ? "auto: first installed model" : "model id")}
+                placeholder={defaults[role] ?? (isText ? defaults.text : undefined) ?? "model id"}
                 onChange={(e) => setModels((m) => ({ ...m, [role]: e.target.value }))}
                 className="font-mono text-[12px] h-8"
               />

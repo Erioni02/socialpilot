@@ -115,7 +115,7 @@ describe("reasoning levels", () => {
 
 describe("Ollama", () => {
   it("normalizes the server URL", () => {
-    expect(ollamaRoot()).toBe("http://localhost:11434");
+    expect(ollamaRoot()).toBe("https://ollama.com");
     expect(ollamaRoot("http://box:11434/v1/")).toBe("http://box:11434");
     expect(ollamaRoot("https://ollama.com/api")).toBe("https://ollama.com");
   });
@@ -123,7 +123,7 @@ describe("Ollama", () => {
   it("lists installed models and flags vision models", async () => {
     const calls = mockFetch(() => json({ models: [{ name: "llama3.2:latest", size: 2e9, details: { family: "llama" } }, { name: "gemma3:4b", details: { family: "gemma3" } }] }));
     const models = await listOllamaModels(undefined, "ok-key");
-    expect(calls[0].url).toBe("http://localhost:11434/api/tags");
+    expect(calls[0].url).toBe("https://ollama.com/api/tags");
     expect((calls[0].init.headers as Record<string, string>).authorization).toBe("Bearer ok-key");
     expect(models.map((m) => [m.name, m.vision])).toEqual([
       ["llama3.2:latest", false],
@@ -135,16 +135,23 @@ describe("Ollama", () => {
     vi.stubGlobal("fetch", async () => {
       throw new TypeError("fetch failed");
     });
-    await expect(listOllamaModels()).rejects.toThrow(/ollama serve/);
+    await expect(listOllamaModels()).rejects.toThrow(/Could not reach Ollama Cloud/);
   });
 
-  it("chats through /v1 without a key and maps reasoning off to none", async () => {
+  it("chats through Ollama Cloud /v1 with the key and maps reasoning off to none", async () => {
     const calls = mockFetch(() => json({ model: "qwen3", choices: [{ finish_reason: "stop", message: { content: "<think>x</think>Hello" } }], usage: { prompt_tokens: 3, completion_tokens: 1 } }));
-    const r = await ollamaProvider().complete({ model: "qwen3", prompt: "hi", reasoning: "off" });
-    expect(calls[0].url).toBe("http://localhost:11434/v1/chat/completions");
+    const r = await ollamaProvider(undefined, "ok-key").complete({ model: "qwen3", prompt: "hi", reasoning: "off" });
+    expect(calls[0].url).toBe("https://ollama.com/v1/chat/completions");
+    expect((calls[0].init.headers as Record<string, string>).authorization).toBe("Bearer ok-key");
     const body = JSON.parse(String(calls[0].init.body));
     expect(body.reasoning_effort).toBe("none");
     expect(body.max_tokens).toBeDefined();
     expect(r.text).toBe("Hello");
+  });
+});
+
+describe("Ollama Cloud key", () => {
+  it("requires an API key", () => {
+    expect(() => ollamaProvider()).toThrow(/API key/);
   });
 });

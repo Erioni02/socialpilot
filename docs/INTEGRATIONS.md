@@ -84,13 +84,13 @@ Token based. Create an access token at vercel.com/account/tokens and enter the p
 | Anthropic | Agents (tool use), text, vision. Default model `claude-opus-5-5`; server-side refusal fallback enabled | `ANTHROPIC_API_KEY` or Settings |
 | OpenAI | Agents (tool use), text, `gpt-image-1` generation and edits, Whisper subtitles | `OPENAI_API_KEY` |
 | Google Gemini | Text and vision (not used for agents) | `GEMINI_API_KEY` |
-| **Ollama** (local or Ollama Cloud) | Free local models: agents with tool calling (e.g. `qwen3`, `llama3.2`), thinking (`gpt-oss`, `deepseek-r1`), vision (`gemma3`, `qwen2.5vl`). With no model chosen, the first installed model is used. | none for local (`OLLAMA_BASE_URL` optional); `OLLAMA_API_KEY` for Ollama Cloud |
+| **Ollama Cloud** | Hosted open models with an API key, no install: agents (`gpt-oss:120b`, `kimi-k2:1t`), thinking (`deepseek-v3.1:671b`), vision (`qwen3-vl:235b`), fast (`gpt-oss:20b`) | `OLLAMA_API_KEY` or Settings |
 | Replicate | FLUX images, FLUX Kontext edits, background removal, video (MiniMax, Kling) | `REPLICATE_API_TOKEN` |
 | Stability AI | Image generation, background removal | `STABILITY_API_KEY` |
 | NewsAPI / Product Hunt | Extra Discover sources | Settings → Data sources |
 | PageSpeed Insights | Lighthouse scores in audits (works keyless at low quota) | optional |
 
-**Ollama:** install it from ollama.com/download, pull a model (`ollama pull llama3.2`, or `qwen3` for agents), then click **Set up** on the Ollama row in Settings → AI providers. Leave the key empty for a local server (default `http://localhost:11434`); for Ollama Cloud use `https://ollama.com` and an API key from ollama.com/settings/keys. Local URLs follow `ALLOW_LOCAL_AI_ENDPOINTS` (on by default outside production). Ollama is used after the other built-in text providers unless a project or role picks it explicitly.
+**Ollama Cloud:** create an API key at ollama.com/settings/keys and add it on the Ollama Cloud row in Settings → AI providers. Nothing is installed locally. **Model & reasoning** lists the models available to your key. Ollama Cloud is used after the other built-in text providers unless a project or role picks it explicitly.
 
 **Custom providers:** in Settings → AI providers → **Custom providers → Add provider** you can add any OpenAI-compatible API: OpenRouter, Groq, Together, DeepSeek, Mistral, xAI, Fireworks, self-hosted vLLM, Ollama or LM Studio (presets included). For each one you set:
 
