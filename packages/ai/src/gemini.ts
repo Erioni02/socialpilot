@@ -2,6 +2,8 @@ import { providerFetch } from "@socialpilot/core";
 import type { CompleteOptions, TextProvider } from "./types";
 
 const BASE = "https://generativelanguage.googleapis.com/v1beta";
+/** Thinking budget (tokens) per reasoning level. */
+const THINKING: Record<string, number> = { off: 0, low: 1024, medium: 8192, high: 24576 };
 
 /** Gemini text + vision (no tool-use session here; agents use Claude or OpenAI). */
 export function geminiProvider(apiKey: string): TextProvider {
@@ -18,7 +20,10 @@ export function geminiProvider(apiKey: string): TextProvider {
         body: JSON.stringify({
           ...(opts.system ? { systemInstruction: { parts: [{ text: opts.system }] } } : {}),
           contents: [{ role: "user", parts }],
-          generationConfig: { maxOutputTokens: opts.maxTokens ?? 8000 },
+          generationConfig: {
+            maxOutputTokens: opts.maxTokens ?? 8000,
+            ...(opts.reasoning && THINKING[opts.reasoning] !== undefined ? { thinkingConfig: { thinkingBudget: THINKING[opts.reasoning] } } : {}),
+          },
         }),
       });
       const text = (r.candidates?.[0]?.content?.parts ?? []).map((p: any) => p.text ?? "").join("").trim();

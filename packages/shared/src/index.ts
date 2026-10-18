@@ -6,3 +6,4 @@ export * from "./schemas";
 export * from "./pricing";
 export * from "./utm";
 export * from "./custom-providers";
+export * from "./provider-settings";

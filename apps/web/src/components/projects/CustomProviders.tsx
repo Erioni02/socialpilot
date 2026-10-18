@@ -6,6 +6,8 @@ import { api } from "@/lib/api";
 import { ago, cn, toastError } from "@/lib/utils";
 import { Badge, Button, Checkbox, ConfirmDialog, Dialog, DialogContent, Field, Input, Select, Textarea } from "@/components/ui";
 import { useProviders } from "./Providers";
+import { ProviderModelSettings } from "./ProviderModelSettings";
+import { SlidersHorizontal } from "@phosphor-icons/react";
 
 export type CustomProvider = {
   id: string;
@@ -263,6 +265,7 @@ export function CustomProviders() {
   const [open, setOpen] = React.useState(false);
   const [editing, setEditing] = React.useState<CustomProvider | null>(null);
   const [deleting, setDeleting] = React.useState<CustomProvider | null>(null);
+  const [modelsFor, setModelsFor] = React.useState<string | null>(null);
   const custom = ((data as any)?.custom ?? []) as CustomProvider[];
   const presets = ((data as any)?.presets ?? []) as Preset[];
   const test = useMutation({
@@ -339,6 +342,9 @@ export function CustomProviders() {
                       </a>
                     </Button>
                   )}
+                  <Button size="sm" variant={modelsFor === c.id ? "primary" : "secondary"} onClick={() => setModelsFor(modelsFor === c.id ? null : c.id)}>
+                    <SlidersHorizontal size={12} weight="bold" /> Model & reasoning
+                  </Button>
                   <Button size="sm" onClick={() => test.mutate(c.id)} loading={test.isPending && test.variables === c.id}>
                     Test
                   </Button>
@@ -355,6 +361,18 @@ export function CustomProviders() {
                     <Trash size={13} />
                   </Button>
                 </div>
+                {modelsFor === c.id && (
+                  <div className="basis-full">
+                    <ProviderModelSettings
+                      providerId={c.id}
+                      capabilities={[...c.capabilities, ...(c.capabilities.includes("vision") && !c.capabilities.includes("text") ? ["text"] : [])]}
+                      models={c.models}
+                      defaults={c.defaultModels as Record<string, string>}
+                      settings={(data as any)?.settings?.[c.id]}
+                      onDone={() => setModelsFor(null)}
+                    />
+                  </div>
+                )}
               </div>
             );
           })}

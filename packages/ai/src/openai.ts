@@ -28,6 +28,20 @@ export interface OpenAICompatibleOptions {
   baseUrl?: string;
   /** OpenAI uses max_completion_tokens; most other OpenAI-compatible APIs use max_tokens. */
   tokenParam?: "max_completion_tokens" | "max_tokens";
+  /** "openai": reasoning_effort only. "compatible": reasoning_effort + chat_template_kwargs thinking switch. */
+  reasoningStyle?: "openai" | "compatible";
+}
+
+/** Extra request fields for the chosen reasoning level (nothing for "default"). */
+export function reasoningFields(level: string | undefined, style: "openai" | "compatible"): Record<string, unknown> {
+  if (!level || level === "default") return {};
+  if (style === "openai") return ["minimal", "low", "medium", "high"].includes(level) ? { reasoning_effort: level } : {};
+  if (["low", "medium", "high"].includes(level)) return { reasoning_effort: level };
+  if (level === "off" || level === "on") {
+    const on = level === "on";
+    return { chat_template_kwargs: { thinking: on, enable_thinking: on } };
+  }
+  return {};
 }
 
 type OAMessage = Record<string, unknown>;
@@ -44,10 +58,11 @@ export function openaiProvider(apiKey: string, opts: OpenAICompatibleOptions = {
   const BASE = opts.baseUrl ?? OPENAI_BASE;
   const PID = opts.id ?? "openai";
   const tokenParam = opts.tokenParam ?? "max_completion_tokens";
+  const reasoningStyle = opts.reasoningStyle ?? (PID === "openai" ? "openai" : "compatible");
   const headers = { authorization: `Bearer ${apiKey}`, "content-type": "application/json" };
 
-  async function chat(model: string, messages: OAMessage[], tools?: ChatSessionOptions["tools"], maxTokens?: number) {
-    const body: Record<string, unknown> = { model, messages, [tokenParam]: maxTokens ?? 8000 };
+  async function chat(model: string, messages: OAMessage[], tools?: ChatSessionOptions["tools"], maxTokens?: number, reasoning?: string) {
+    const body: Record<string, unknown> = { model, messages, [tokenParam]: maxTokens ?? 8000, ...reasoningFields(reasoning, reasoningStyle) };
     if (tools?.length) {
       body.tools = tools.map((t) => ({ type: "function", function: { name: t.name, description: t.description, parameters: t.inputSchema } }));
       body.tool_choice = "auto";
@@ -92,13 +107,13 @@ export function openaiProvider(apiKey: string, opts: OpenAICompatibleOptions = {
       const messages: OAMessage[] = [];
       if (opts.system) messages.push({ role: "system", content: opts.system });
       messages.push({ role: "user", content: userContent(opts.prompt, opts.images) });
-      const { turn } = await chat(opts.model, messages, undefined, opts.maxTokens);
+      const { turn } = await chat(opts.model, messages, undefined, opts.maxTokens, opts.reasoning);
       return { text: turn.text, usage: turn.usage, model: turn.model };
     },
     createSession(opts: ChatSessionOptions): ChatSession {
       const history: OAMessage[] = [{ role: "system", content: opts.system }];
       const run = async () => {
-        const { turn, message } = await chat(opts.model, history, opts.tools, opts.maxTokens);
+        const { turn, message } = await chat(opts.model, history, opts.tools, opts.maxTokens, opts.reasoning);
         history.push({ role: "assistant", content: message.content ?? null, ...(message.tool_calls ? { tool_calls: message.tool_calls } : {}) });
         return turn;
       };

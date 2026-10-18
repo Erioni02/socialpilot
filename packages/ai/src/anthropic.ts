@@ -24,6 +24,13 @@ function imageBlocks(images: ImageInput[] = []): Anthropic.Beta.BetaImageBlockPa
   }));
 }
 
+const EFFORTS = ["low", "medium", "high", "xhigh", "max"] as const;
+type Effort = (typeof EFFORTS)[number];
+/** Maps the user's reasoning level to Claude's effort; other levels keep the call's default. */
+function effortFor(reasoning: string | undefined, fallback: Effort): Effort {
+  return (EFFORTS as readonly string[]).includes(reasoning ?? "") ? (reasoning as Effort) : fallback;
+}
+
 function wrapError(err: unknown): never {
   if (err instanceof Anthropic.RateLimitError) throw new ProviderError("anthropic", err.message, 429, undefined, true);
   if (err instanceof Anthropic.AuthenticationError) throw new ProviderError("anthropic", "Invalid Anthropic API key", 401);
@@ -94,7 +101,7 @@ export function anthropicProvider(apiKey: string): TextProvider {
         model: opts.model,
         system: opts.system,
         maxTokens: opts.maxTokens,
-        effort: opts.effort ?? "low",
+        effort: effortFor(opts.reasoning, opts.effort ?? "low"),
         messages: [{ role: "user", content: [...imageBlocks(opts.images), { type: "text", text: opts.prompt }] }],
       });
       const turn = toTurn(resp);
@@ -108,7 +115,7 @@ export function anthropicProvider(apiKey: string): TextProvider {
         input_schema: t.inputSchema as Anthropic.Beta.BetaTool.InputSchema,
       }));
       const run = async () => {
-        const resp = await create({ model: opts.model, system: opts.system, messages: history, tools, maxTokens: opts.maxTokens, effort: opts.effort });
+        const resp = await create({ model: opts.model, system: opts.system, messages: history, tools, maxTokens: opts.maxTokens, effort: effortFor(opts.reasoning, opts.effort ?? "medium") });
         // Append the full content (including thinking blocks) unchanged: the history is append-only.
         history.push({ role: "assistant", content: resp.content as Anthropic.Beta.BetaContentBlockParam[] });
         return toTurn(resp);

@@ -4,7 +4,7 @@ import { prisma } from "@socialpilot/db";
 import { badRequest, config, redactString } from "@socialpilot/core";
 import { listNvidiaModels, testProvider } from "@socialpilot/ai";
 import { AI_PROVIDER_CATALOG, AGENT_LABELS, AUTONOMY_LABELS, CAPABILITY_REGISTRY, DATA_PROVIDER_CATALOG, INTEGRATION_CATALOG, PERMISSION_LABELS, providerCredentialSchema } from "@socialpilot/shared";
-import { audit, credentialStatus, fetchCustomModels, ffmpeg, getCustomProvider, listCustomProviders, resolveSecret, saveCredential, saveCustomProvider } from "@socialpilot/engine";
+import { audit, credentialStatus, fetchCustomModels, listProviderSettings, saveProviderSettings, ffmpeg, getCustomProvider, listCustomProviders, resolveSecret, saveCredential, saveCustomProvider } from "@socialpilot/engine";
 import { CUSTOM_PROVIDER_PRESETS, isCustomProvider } from "@socialpilot/shared";
 import { parse, userOf } from "../lib/http";
 
@@ -50,8 +50,20 @@ export default async function systemRoutes(app: FastifyInstance) {
   app.get("/providers", { preHandler: app.requireAuth }, async (req) => ({
     providers: await credentialStatus(userOf(req).id),
     custom: await listCustomProviders(userOf(req).id),
+    settings: await listProviderSettings(userOf(req).id),
     presets: CUSTOM_PROVIDER_PRESETS,
   }));
+
+  /** Per-provider model + reasoning preferences (applies to every project using that provider). */
+  app.put("/providers/:provider/settings", { preHandler: app.requireAuth }, async (req) => {
+    const { provider } = req.params as { provider: string };
+    const user = userOf(req);
+    const known = provider in AI_PROVIDER_CATALOG || (isCustomProvider(provider) && !!(await getCustomProvider(user.id, provider)));
+    if (!known) throw badRequest(`Unknown provider ${provider}`);
+    const settings = await saveProviderSettings(user.id, provider, req.body);
+    await audit({ userId: user.id, actor: "user", action: "provider_settings.updated", target: provider, details: settings as any, ip: req.ip });
+    return { settings };
+  });
 
   // ───── Custom (user-added, OpenAI-compatible) providers ─────
   app.post("/providers/custom", { preHandler: app.requireAuth }, async (req) => {

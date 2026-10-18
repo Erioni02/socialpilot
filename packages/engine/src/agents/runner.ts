@@ -147,7 +147,7 @@ export async function runAgentTask(payload: { taskId: string }) {
     if (agentCfg && !agentCfg.enabled) throw new AppError(403, `The ${AGENT_LABELS[agentType].name} agent is disabled for this project.`, "agent_disabled");
     const model = task.model ?? agentCfg?.model ?? ai.model;
     await prisma.task.update({ where: { id: task.id }, data: { model } });
-    const session = ai.provider.createSession!({ model, system: systemPrompt(project, agentType, agentCfg?.instructions, !!(task.input as any)?.autonomous), tools: toolDefs(), maxTokens: 32000, effort: "medium" });
+    const session = ai.provider.createSession!({ model, system: systemPrompt(project, agentType, agentCfg?.instructions, !!(task.input as any)?.autonomous), tools: toolDefs(), maxTokens: 32000, effort: "medium", reasoning: ai.reasoning });
     const input = task.input as { attachmentAssetIds?: string[]; context?: Record<string, unknown>; autonomous?: boolean };
     const att = await attachmentImages(project.id, input.attachmentAssetIds ?? []);
     let userText = `Task from the project owner:\n${task.instruction}`;

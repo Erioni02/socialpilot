@@ -98,6 +98,17 @@ Token based. Create an access token at vercel.com/account/tokens and enter the p
 
 It then appears in every model-role picker. Remote URLs must use HTTPS. Localhost/private URLs are allowed only when `ALLOW_LOCAL_AI_ENDPOINTS` is on (default outside production); cloud-metadata addresses are always blocked. Video generation stays on Seedance/Replicate because there is no common video API standard.
 
+**Model & reasoning per provider:** every provider with a key, built-in or custom, has a **Model & reasoning** button in Settings → AI providers. For each job (Main AI, Thinking & planning, Vision, Fast tasks, Image, Video) you can pick the model and how much it reasons. Leave the model empty to use the default; a project can still override the model in Project settings → AI & budget. Reasoning levels map to each API:
+
+| Provider | Levels | Sent as |
+|---|---|---|
+| Anthropic | low → max | Claude `effort` (adaptive thinking) |
+| OpenAI | minimal → high | `reasoning_effort` (reasoning models only) |
+| Gemini | off, low, medium, high | `thinkingConfig.thinkingBudget` (0 / 1k / 8k / 24k) |
+| NVIDIA and custom | off, on, low, medium, high | `chat_template_kwargs.thinking` (on/off) or `reasoning_effort` (low/medium/high) |
+
+"Provider default" sends nothing. Choose only levels the selected model supports; otherwise the provider returns an error, which the app shows.
+
 **Model roles:** each project picks a provider and model for *Main AI*, *Thinking & planning*, *Vision*, *Fast tasks*, *Image generation* and *Video generation* (Project settings → AI). Main models without native vision get attachments described by the vision model, and agents have an `analyze_media` tool that sends images, or FFmpeg-sampled video frames, to the vision model.
 
 Model IDs are free text in project AI settings, so newer models can be used without code changes. Cost estimates for budget enforcement are in `packages/shared/src/pricing.ts`.

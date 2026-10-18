@@ -93,3 +93,22 @@ describe("ByteDance Seedance (BytePlus ModelArk)", () => {
     vi.useRealTimers();
   });
 });
+
+describe("reasoning levels", () => {
+  it("maps levels to OpenAI-style and compatible request fields", async () => {
+    const { reasoningFields } = await import("../src/openai");
+    expect(reasoningFields("default", "openai")).toEqual({});
+    expect(reasoningFields("minimal", "openai")).toEqual({ reasoning_effort: "minimal" });
+    expect(reasoningFields("off", "openai")).toEqual({});
+    expect(reasoningFields("high", "compatible")).toEqual({ reasoning_effort: "high" });
+    expect(reasoningFields("off", "compatible")).toEqual({ chat_template_kwargs: { thinking: false, enable_thinking: false } });
+  });
+  it("sends the thinking switch to NVIDIA and a thinking budget to Gemini", async () => {
+    const calls = mockFetch(() => json({ model: "m", choices: [{ finish_reason: "stop", message: { content: "ok" } }], candidates: [{ content: { parts: [{ text: "ok" }] } }], usage: {} }));
+    await nvidiaProvider("k").complete({ model: "qwen/qwen3", prompt: "hi", reasoning: "on" });
+    expect(JSON.parse(String(calls[0].init.body)).chat_template_kwargs).toEqual({ thinking: true, enable_thinking: true });
+    const { geminiProvider } = await import("../src");
+    await geminiProvider("g").complete({ model: "gemini-2.5-flash", prompt: "hi", reasoning: "off" });
+    expect(JSON.parse(String(calls[1].init.body)).generationConfig.thinkingConfig).toEqual({ thinkingBudget: 0 });
+  });
+});

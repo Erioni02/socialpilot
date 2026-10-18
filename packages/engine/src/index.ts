@@ -2,6 +2,7 @@ export * from "./infra/events";
 export * from "./infra/audit";
 export * from "./infra/credentials";
 export * from "./infra/custom-providers";
+export * from "./infra/provider-settings";
 export * from "./infra/storage";
 export * from "./infra/queue";
 export * from "./projects/context";

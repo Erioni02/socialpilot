@@ -7,6 +7,9 @@ import { ago, cn, toastError } from "@/lib/utils";
 import { useMeta } from "@/components/common";
 import { Badge, Button, ConfirmDialog, Field, Input, Select, Skeleton, StatusBadge, Tooltip } from "@/components/ui";
 import { CustomProviders, type CustomProvider } from "./CustomProviders";
+import { ProviderModelSettings } from "./ProviderModelSettings";
+import type { ProviderSettings } from "@socialpilot/shared/src/provider-settings";
+import { SlidersHorizontal } from "@phosphor-icons/react";
 
 export type ProviderStatus = {
   provider: string;
@@ -22,14 +25,15 @@ export type ProviderStatus = {
 type ExtraField = { key: "accountId" | "baseUrl"; label: string; envVar: string; optional?: boolean; placeholder?: string };
 
 export function useProviders() {
-  return useQuery({ queryKey: ["providers"], queryFn: () => api.get<{ providers: ProviderStatus[]; custom: CustomProvider[]; presets: unknown[] }>("/providers") });
+  return useQuery({ queryKey: ["providers"], queryFn: () => api.get<{ providers: ProviderStatus[]; custom: CustomProvider[]; presets: unknown[]; settings: Record<string, ProviderSettings> }>("/providers") });
 }
 
 /**
  * One row per API-key provider (AI or data): status, masked hint, add/replace, test and delete.
  * Secret values are only ever sent, never displayed.
  */
-export function ProviderKeyRow({ id, name, description, docsUrl, keyUrl, envVar, status, capabilities, extraFields = [], allowDelete = true }: { id: string; name: string; description?: React.ReactNode; docsUrl?: string; keyUrl?: string; envVar?: string; status?: ProviderStatus; capabilities?: string[]; extraFields?: ExtraField[]; allowDelete?: boolean }) {
+export function ProviderKeyRow({ id, name, description, docsUrl, keyUrl, envVar, status, capabilities, extraFields = [], allowDelete = true, modelSettings }: { id: string; name: string; description?: React.ReactNode; docsUrl?: string; keyUrl?: string; envVar?: string; status?: ProviderStatus; capabilities?: string[]; extraFields?: ExtraField[]; allowDelete?: boolean; modelSettings?: { models: any[]; defaults: Record<string, string>; settings?: ProviderSettings } }) {
+  const [showModels, setShowModels] = React.useState(false);
   const qc = useQueryClient();
   const [editing, setEditing] = React.useState(false);
   const [key, setKey] = React.useState("");
@@ -141,6 +145,11 @@ export function ProviderKeyRow({ id, name, description, docsUrl, keyUrl, envVar,
               </a>
             </Button>
           )}
+          {configured && modelSettings && (
+            <Button size="sm" variant={showModels ? "primary" : "secondary"} onClick={() => setShowModels((v) => !v)}>
+              <SlidersHorizontal size={12} weight="bold" /> Model & reasoning
+            </Button>
+          )}
           {configured && (
             <Button size="sm" onClick={() => test.mutate()} loading={test.isPending}>
               Test
@@ -185,6 +194,9 @@ export function ProviderKeyRow({ id, name, description, docsUrl, keyUrl, envVar,
           </div>
         </form>
       )}
+      {showModels && modelSettings && (
+        <ProviderModelSettings providerId={id} capabilities={capabilities ?? []} models={modelSettings.models} defaults={modelSettings.defaults} settings={modelSettings.settings} onDone={() => setShowModels(false)} />
+      )}
       <ConfirmDialog
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
@@ -217,7 +229,7 @@ export function AiProviderKeys({ only }: { only?: string[] }) {
     <div className="rounded-xl border border-line bg-surface divide-y divide-line">
       {ids.map((id) => {
         const c = meta.aiProviders[id];
-        return <ProviderKeyRow key={id} id={id} name={c.name} docsUrl={c.docsUrl} keyUrl={c.keyUrl} envVar={c.envVar} capabilities={c.capabilities} extraFields={c.extraFields} status={data?.providers.find((x) => x.provider === id)} />;
+        return <ProviderKeyRow key={id} id={id} name={c.name} docsUrl={c.docsUrl} keyUrl={c.keyUrl} envVar={c.envVar} capabilities={c.capabilities} extraFields={c.extraFields} status={data?.providers.find((x) => x.provider === id)} modelSettings={{ models: c.models, defaults: c.defaultModels, settings: data?.settings?.[id] }} />;
       })}
     </div>
     {!only && <CustomProviders />}

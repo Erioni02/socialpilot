@@ -15,6 +15,8 @@ import { AI_PROVIDER_CATALOG, estimateTextCost, estimateUnitCost, isCustomProvid
 import type { z } from "zod";
 import { getApiKey, getProviderCreds } from "../infra/credentials";
 import { getCustomProvider, listCustomProviders, validateBaseUrl } from "../infra/custom-providers";
+import { getProviderSettings } from "../infra/provider-settings";
+import type { ReasoningLevel } from "@socialpilot/shared";
 
 export interface AiCallContext {
   userId: string;
@@ -110,18 +112,25 @@ export async function resolveTextAI(userId: string, project?: Pick<Project, "aiC
       { kind: "ai_provider", link: "/settings?tab=ai" },
     );
   }
+  // Precedence: project role override → provider settings (Settings → AI providers) → provider default.
+  const ps = await getProviderSettings(userId, found.provider);
+  const reasoning: ReasoningLevel = ps.reasoning[role] ?? "default";
   const pick = (fallback: () => string) =>
-    found.provider === rc.provider && rc.model ? rc.model : found.provider === cfg.textProvider && cfg.textModel && role === "text" ? cfg.textModel : fallback();
+    found.provider === rc.provider && rc.model
+      ? rc.model
+      : found.provider === cfg.textProvider && cfg.textModel && role === "text"
+        ? cfg.textModel
+        : (ps.models[role] ?? fallback());
   if (found.custom) {
     const c = found.custom;
     await validateBaseUrl(c.baseUrl); // re-checked at call time (DNS can change)
     const model = pick(() => customDefault(c, role));
     const price = c.pricing.inputPer1M != null || c.pricing.outputPer1M != null ? { input: c.pricing.inputPer1M, output: c.pricing.outputPer1M } : { input: 0, output: 0 };
-    return { providerId: found.provider, model, role, price, provider: openaiProvider(c.apiKey ?? "", { id: c.name, baseUrl: c.baseUrl, tokenParam: c.tokenParam }) as ReturnType<typeof textProvider> };
+    return { providerId: found.provider, model, role, reasoning, price, provider: openaiProvider(c.apiKey ?? "", { id: c.name, baseUrl: c.baseUrl, tokenParam: c.tokenParam }) as ReturnType<typeof textProvider> };
   }
   const defaults = AI_PROVIDER_CATALOG[found.provider as keyof typeof AI_PROVIDER_CATALOG].defaultModels;
-  const model = pick(() => defaults[role] ?? defaults.text!);
-  return { providerId: found.provider, model, role, price: null as { input?: number; output?: number } | null, provider: textProvider(found.provider, found.creds) };
+  const model = pick(() => defaults[role] ?? ps.models.text ?? defaults.text!);
+  return { providerId: found.provider, model, role, reasoning, price: null as { input?: number; output?: number } | null, provider: textProvider(found.provider, found.creds) };
 }
 
 export async function hasTextAI(userId: string, project?: Pick<Project, "aiConfig"> | null): Promise<boolean> {
@@ -193,7 +202,7 @@ export async function aiComplete(ctx: AiCallContext, opts: Omit<CompleteOptions,
   const ai = await resolveTextAI(ctx.userId, project, { role: opts.role ?? (opts.images?.length ? "vision" : "text") });
   const model = opts.model ?? ai.model;
   await checkBudget(ctx, textCost(ai, model, 4000, 2000));
-  const r = await ai.provider.complete({ ...opts, model });
+  const r = await ai.provider.complete({ ...opts, model, reasoning: ai.reasoning });
   await recordUsage(ctx, { provider: ai.providerId, model, kind: opts.images?.length ? "vision" : "text", usage: r.usage, costUsd: textCost(ai, model, r.usage.inputTokens, r.usage.outputTokens) });
   return { ...r, provider: ai.providerId };
 }
@@ -206,7 +215,7 @@ export async function aiJson<S extends z.ZodTypeAny>(
   const ai = await resolveTextAI(ctx.userId, project, { role: opts.role ?? (opts.images?.length ? "vision" : "text") });
   const model = opts.model ?? ai.model;
   await checkBudget(ctx, textCost(ai, model, 6000, 3000));
-  const r = await completeJson(ai.provider as TextProvider, { ...opts, model });
+  const r = await completeJson(ai.provider as TextProvider, { ...opts, model, reasoning: ai.reasoning });
   await recordUsage(ctx, { provider: ai.providerId, model, kind: "text", usage: r.usage, costUsd: textCost(ai, model, r.usage.inputTokens, r.usage.outputTokens) });
   return { data: r.data, provider: ai.providerId, model };
 }
@@ -227,11 +236,13 @@ export async function resolveImageAI(userId: string, project?: Pick<Project, "ai
   if (found.custom) {
     const c = found.custom;
     await validateBaseUrl(c.baseUrl);
-    const model = found.provider === cfg.imageProvider && cfg.imageModel ? cfg.imageModel : customDefault(c, "image", "image");
+    const cps = await getProviderSettings(userId, found.provider);
+    const model = found.provider === cfg.imageProvider && cfg.imageModel ? cfg.imageModel : (cps.models.image ?? customDefault(c, "image", "image"));
     return { providerId: found.provider, model, unitPrice: c.pricing.perImage ?? 0, provider: openaiProvider(c.apiKey ?? "", { id: c.name, baseUrl: c.baseUrl, tokenParam: c.tokenParam }) as ReturnType<typeof imageProvider> };
   }
+  const ps = await getProviderSettings(userId, found.provider);
   const model =
-    found.provider === cfg.imageProvider && cfg.imageModel ? cfg.imageModel : AI_PROVIDER_CATALOG[found.provider as keyof typeof AI_PROVIDER_CATALOG].defaultModels.image!;
+    found.provider === cfg.imageProvider && cfg.imageModel ? cfg.imageModel : (ps.models.image ?? AI_PROVIDER_CATALOG[found.provider as keyof typeof AI_PROVIDER_CATALOG].defaultModels.image!);
   return { providerId: found.provider, model, unitPrice: null as number | null, provider: imageProvider(found.provider, found.creds) };
 }
 
@@ -240,7 +251,8 @@ export async function resolveVideoAI(userId: string, project?: Pick<Project, "ai
   const order = cfg.videoProvider ? [cfg.videoProvider, ...VIDEO_ORDER.filter((p) => p !== cfg.videoProvider)] : VIDEO_ORDER;
   const found = await firstConfigured(userId, order);
   if (!found) throw new SetupRequiredError("Video generation needs a BytePlus (Seedance) or Replicate key. Add one in Settings → AI providers.", { kind: "ai_provider", link: "/settings?tab=ai" });
-  const model = found.provider === cfg.videoProvider && cfg.videoModel ? cfg.videoModel : AI_PROVIDER_CATALOG[found.provider as keyof typeof AI_PROVIDER_CATALOG].defaultModels.video!;
+  const ps = await getProviderSettings(userId, found.provider);
+  const model = found.provider === cfg.videoProvider && cfg.videoModel ? cfg.videoModel : (ps.models.video ?? AI_PROVIDER_CATALOG[found.provider as keyof typeof AI_PROVIDER_CATALOG].defaultModels.video!);
   return { providerId: found.provider, model, provider: videoProvider(found.provider, found.creds) };
 }
 

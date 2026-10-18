@@ -768,3 +768,14 @@ model WebTrafficReport {
   @@index([projectId, createdAt])
   @@index([userId, createdAt])
 }
+
+/// Per-user, per-provider preferences: which model to use for each role and how much the model should reason.
+model ProviderSetting {
+  id        String   @id @default(cuid())
+  userId    String
+  provider  String
+  settings  Json     @default("{}")
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, provider])
+}

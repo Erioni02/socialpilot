@@ -1,3 +1,6 @@
+import type { ReasoningLevel } from "@socialpilot/shared";
+export type { ReasoningLevel };
+
 export interface Usage {
   inputTokens: number;
   outputTokens: number;
@@ -53,6 +56,8 @@ export interface ChatSessionOptions {
   tools: ToolDef[];
   maxTokens?: number;
   effort?: "low" | "medium" | "high" | "xhigh" | "max";
+  /** User-selected reasoning level (per provider + role). "default"/undefined keeps the adapter's default. */
+  reasoning?: ReasoningLevel;
 }
 
 export interface CompleteOptions {
@@ -62,6 +67,7 @@ export interface CompleteOptions {
   images?: ImageInput[];
   maxTokens?: number;
   effort?: "low" | "medium" | "high" | "xhigh" | "max";
+  reasoning?: ReasoningLevel;
 }
 
 export interface CompleteResult {
