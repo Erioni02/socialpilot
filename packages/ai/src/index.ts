@@ -5,17 +5,17 @@ import { geminiProvider } from "./gemini";
 import { replicateProvider, replicateVideoProvider } from "./replicate";
 import { stabilityProvider } from "./stability";
 import { nvidiaProvider, listNvidiaModels } from "./nvidia";
-import { cloudflareProvider } from "./cloudflare";
+import { seedreamProvider } from "./seedream";
 import { seedanceProvider } from "./seedance";
 import { listOllamaModels, ollamaProvider, ollamaRoot, OLLAMA_DEFAULT_URL } from "./ollama";
 import type { CompleteOptions, ImageProvider, TextProvider, TranscriptionProvider, Usage, VideoProvider } from "./types";
 
 export * from "./types";
-export { anthropicProvider, openaiProvider, geminiProvider, replicateProvider, replicateVideoProvider, stabilityProvider, nvidiaProvider, listNvidiaModels, cloudflareProvider, seedanceProvider, ollamaProvider, listOllamaModels, ollamaRoot, OLLAMA_DEFAULT_URL };
+export { anthropicProvider, openaiProvider, geminiProvider, replicateProvider, replicateVideoProvider, stabilityProvider, nvidiaProvider, listNvidiaModels, seedreamProvider, seedanceProvider, ollamaProvider, listOllamaModels, ollamaRoot, OLLAMA_DEFAULT_URL };
 export type { OllamaModel } from "./ollama";
 export { stripThinking } from "./openai";
 
-/** Credential bundle: most providers need only apiKey; Cloudflare also needs accountId, BytePlus may set a regional baseUrl. */
+/** Credential bundle: most providers need only apiKey; BytePlus may set a regional baseUrl. */
 export interface ProviderCredentials {
   apiKey: string;
   accountId?: string;
@@ -42,10 +42,10 @@ export function textProvider(provider: string, c: string | ProviderCredentials):
 }
 
 export function imageProvider(provider: string, c: string | ProviderCredentials): ImageProvider {
-  const { apiKey, accountId } = cred(c);
+  const { apiKey, baseUrl } = cred(c);
   switch (provider) {
-    case "cloudflare":
-      return cloudflareProvider(apiKey, accountId ?? "");
+    case "byteplus":
+      return seedreamProvider(apiKey, baseUrl || undefined);
     case "openai":
       return openaiProvider(apiKey);
     case "replicate":
@@ -72,8 +72,6 @@ export function transcriptionProvider(provider: string, apiKey: string): Transcr
 export async function testProvider(provider: string, c: string | ProviderCredentials): Promise<string> {
   const { apiKey, accountId, baseUrl } = cred(c);
   switch (provider) {
-    case "cloudflare":
-      return cloudflareProvider(apiKey, accountId ?? "").test();
     case "byteplus":
       return seedanceProvider(apiKey, baseUrl || undefined).test();
     case "ollama":

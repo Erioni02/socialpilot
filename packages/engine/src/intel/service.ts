@@ -262,7 +262,7 @@ export async function deleteIntelEntity(userId: string, id: string) {
 /** Scheduled snapshots for watched items — free sources only, never paid. */
 export async function refreshWatchedIntel() {
   const due = await prisma.intelEntity.findMany({
-    where: { watched: true, OR: [{ lastFetchedAt: null }, { lastFetchedAt: { lt: new Date(Date.now() - 6 * 3600_000) } }] },
+    where: { watched: true, OR: [{ lastFetchedAt: null }, { lastFetchedAt: { lt: new Date(Date.now() - 19 * 60_000) } }] },
     take: 40,
     orderBy: { lastFetchedAt: "asc" },
   });

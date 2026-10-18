@@ -26,6 +26,8 @@ import { createCampaign, generateCampaignPlan, materializePlan } from "../conten
 import { applyImageOp, applyVideoOp, createAsset, generateImages, generateVideo, normalizeFolder, restoreVersion } from "../media/service";
 import { draftReply, feedbackSummary, sendReply } from "../inbox/service";
 import { generateOpportunities, listDiscoverItems, refreshDiscover } from "../discover/service";
+import { listPulse } from "../intel/pulse";
+import { getSkill, SKILLS } from "./skills";
 import { listDeployments, listRepoFiles, proposeCodeChange, readRepoFile, requestMerge, requestPromotion, submitCodeChange } from "../website/code";
 import { runWebsiteAudit } from "../website/audit";
 import { analyzeMedia } from "../media/vision";
@@ -255,6 +257,31 @@ export const TOOLS: AgentTool[] = [
       if (!latest?.lastFetchAt || Date.now() - latest.lastFetchAt.getTime() > 2 * 3600_000) await refreshDiscover();
       const items = await listDiscoverItems({ q: args.query, category: args.category, hours: args.hours, limit: args.limit });
       return items.map((i) => ({ itemId: i.id, title: i.title, url: i.url, source: i.sourceName, publishedAt: i.publishedAt, points: i.score, comments: i.comments, category: i.category, summary: i.summary.slice(0, 300) }));
+    },
+  },
+  {
+    name: "get_social_pulse",
+    description: "What is rising on social media right now (Bluesky, Mastodon, Google Trends; TikTok/Instagram trending if the owner enabled paid crawling). Crawled every 20 minutes. Ranked by momentum and relevance to this project; every item has a source URL.",
+    permission: null,
+    untrusted: true,
+    schema: z.object({ platform: z.enum(["all", "bluesky", "mastodon", "google_trends", "tiktok", "instagram"]).default("all"), hours: z.number().int().min(1).max(168).default(24), limit: z.number().int().min(1).max(50).default(25), relevantOnly: z.boolean().default(false) }),
+    jsonSchema: obj({ platform: { type: "string", enum: ["all", "bluesky", "mastodon", "google_trends", "tiktok", "instagram"] }, hours: num("Lookback hours"), limit: num("Max items"), relevantOnly: { type: "boolean", description: "Only items matching project keywords" } }),
+    async run(args, ctx) {
+      const r = await listPulse(ctx.userId, { platform: args.platform, hours: args.hours, projectId: ctx.project.id, limit: 200 });
+      const items = (args.relevantOnly ? r.items.filter((i) => i.matched.length) : r.items).slice(0, args.limit);
+      return { lastCrawlAt: r.lastCrawlAt, items: items.map((i) => ({ itemId: i.id, platform: i.platform, kind: i.kind, title: i.title, summary: i.summary.slice(0, 280), url: i.url, author: i.author, signal: i.score, matchedKeywords: i.matched, firstSeenAt: i.firstSeenAt })) };
+    },
+  },
+  {
+    name: "load_skill",
+    description: `Load an expert marketing/creative playbook into context. Available: ${SKILLS.map((s) => s.name).join(", ")}.`,
+    permission: null,
+    schema: z.object({ name: z.string() }),
+    jsonSchema: obj({ name: { type: "string", enum: SKILLS.map((s) => s.name) } }, ["name"]),
+    async run(args) {
+      const s = getSkill(args.name);
+      if (!s) return { error: `Unknown skill. Available: ${SKILLS.map((x) => x.name).join(", ")}` };
+      return { skill: s.name, title: s.title, playbook: s.body };
     },
   },
   {
@@ -556,11 +583,11 @@ export const TOOLS: AgentTool[] = [
   },
   {
     name: "generate_image",
-    description: "Generate images with the configured image model. Real files are saved to the media library; returns asset ids.",
+    description: "Generate images with the configured image model (ByteDance Seedream by default). Your brief is upgraded by a creative-director pass (brand + creative skills) for clean, professional, converting results. Real files are saved to the media library; returns asset ids.",
     permission: "editAssets",
     paid: true,
-    schema: z.object({ prompt: z.string().min(3), size: z.enum(["1024x1024", "1024x1536", "1536x1024"]).default("1024x1024"), n: z.number().int().min(1).max(4).default(1), folder: z.string().default("/"), campaignId: z.string().optional(), name: z.string().optional() }),
-    jsonSchema: obj({ prompt: str("Detailed visual prompt"), size: { type: "string", enum: ["1024x1024", "1024x1536", "1536x1024"] }, n: num("1-4"), folder: str("Folder path"), campaignId: str("Campaign id"), name: str("Asset name") }, ["prompt"]),
+    schema: z.object({ prompt: z.string().min(3), size: z.enum(["1024x1024", "1024x1536", "1536x1024"]).default("1024x1024"), n: z.number().int().min(1).max(4).default(1), folder: z.string().default("/"), campaignId: z.string().optional(), name: z.string().optional(), enhance: z.boolean().default(true) }),
+    jsonSchema: obj({ prompt: str("Creative brief: subject, purpose, audience, format, exact on-image text in quotes"), enhance: { type: "boolean", description: "Run the creative-director pass (default true). Set false only when the prompt is already final." }, size: { type: "string", enum: ["1024x1024", "1024x1536", "1536x1024"] }, n: num("1-4"), folder: str("Folder path"), campaignId: str("Campaign id"), name: str("Asset name") }, ["prompt"]),
     async run(args, ctx) {
       const assets = await generateImages({ userId: ctx.userId, projectId: ctx.project.id, taskId: ctx.task.id, project: ctx.project, createdBy: `agent:${ctx.actor.agentType}` }, args);
       return assets.map(assetView);
@@ -690,8 +717,8 @@ export const TOOLS: AgentTool[] = [
     description: "Generate a short video clip with the configured video model (optionally from a first-frame image asset). Saves a real MP4 asset. Can take several minutes.",
     permission: "editAssets",
     paid: true,
-    schema: z.object({ prompt: z.string().min(3), aspect: z.enum(["9:16", "16:9", "1:1"]).default("9:16"), durationSec: z.number().int().min(2).max(10).default(5), imageAssetId: z.string().optional(), folder: z.string().default("/videos"), campaignId: z.string().optional() }),
-    jsonSchema: obj({ prompt: str("Video prompt"), aspect: { type: "string", enum: ["9:16", "16:9", "1:1"] }, durationSec: num("Seconds"), imageAssetId: str("First-frame image asset"), folder: str("Folder"), campaignId: str("Campaign") }, ["prompt"]),
+    schema: z.object({ prompt: z.string().min(3), aspect: z.enum(["9:16", "16:9", "1:1"]).default("9:16"), durationSec: z.number().int().min(2).max(10).default(5), imageAssetId: z.string().optional(), folder: z.string().default("/videos"), campaignId: z.string().optional(), enhance: z.boolean().default(true) }),
+    jsonSchema: obj({ prompt: str("Shot brief: subject + action, camera, setting, mood"), enhance: { type: "boolean", description: "Run the creative-director pass (default true)" }, aspect: { type: "string", enum: ["9:16", "16:9", "1:1"] }, durationSec: num("Seconds"), imageAssetId: str("First-frame image asset"), folder: str("Folder"), campaignId: str("Campaign") }, ["prompt"]),
     async run(args, ctx) {
       if (args.imageAssetId) await ownedAsset(ctx.project.id, args.imageAssetId);
       const a = await generateVideo({ userId: ctx.userId, projectId: ctx.project.id, taskId: ctx.task.id, project: ctx.project, createdBy: `agent:${ctx.actor.agentType}` }, args);

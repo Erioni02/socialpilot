@@ -23,14 +23,13 @@ describe("model roles", () => {
     expect((await resolveTextAI(u.id, p2, { role: "reasoning" })).model).toBe("nvidia/nemotron-3-ultra-550b-a55b");
   });
 
-  it("routes images to Cloudflare and video to Seedance when configured", async () => {
+  it("routes images (Seedream) and video (Seedance) to ByteDance with one BytePlus key", async () => {
     const u = await user();
-    await saveCredential(u.id, "cloudflare", { apiKey: "cf-token", accountId: "acc" });
     await saveCredential(u.id, "byteplus", { apiKey: "ark-key" });
     const img = await resolveImageAI(u.id, null);
-    expect([img.providerId, img.model]).toEqual(["cloudflare", "@cf/black-forest-labs/flux-1-schnell"]);
+    expect([img.providerId, img.model]).toEqual(["byteplus", "seedream-5-0-260128"]);
     const edit = await resolveImageAI(u.id, null, undefined, "edit");
-    expect(edit.providerId).toBe("cloudflare");
+    expect(edit.providerId).toBe("byteplus");
     await expect(resolveImageAI(u.id, null, undefined, "remove_background")).rejects.toThrow(/Replicate or Stability/);
     const vid = await resolveVideoAI(u.id, null);
     expect([vid.providerId, vid.model]).toEqual(["byteplus", "dreamina-seedance-2-0-fast-260128"]);

@@ -31,6 +31,7 @@ import {
   Tooltip,
 } from "@/components/ui";
 import { TrafficPanel } from "@/components/insights/TrafficPanel";
+import { PulsePanel } from "@/components/insights/PulsePanel";
 
 type MV = { value: number; approx?: boolean };
 type Metrics = Partial<Record<string, MV>>;
@@ -190,7 +191,7 @@ function AnalyzeBox({ onAnalyzed }: { onAnalyzed: (entityId: string | null) => v
   const watch = useMutation({
     mutationFn: (id: string) => api.patch(`/intel/entities/${id}`, { watched: true }),
     onSuccess: () => {
-      toast.success("Added to watchlist — snapshots every 6 hours from free sources");
+      toast.success("Added to watchlist — snapshots every 20 minutes from free sources");
       qc.invalidateQueries({ queryKey: ["intel"] });
     },
   });
@@ -488,7 +489,7 @@ function EntityDetail({ id, onClose }: { id: string; onClose: () => void }) {
               </ResponsiveContainer>
             </div>
           ) : (
-            <p className="text-[12.5px] text-muted">A chart appears after two successful snapshots. Watch this item to record one every 6 hours (free sources only).</p>
+            <p className="text-[12.5px] text-muted">A chart appears after two successful snapshots. Watch this item to record one every 20 minutes (free sources only).</p>
           )}
           <p className="text-[11px] text-faint mt-1">Changes are differences between snapshots this app recorded — they are not unique viewers.</p>
         </div>
@@ -586,13 +587,18 @@ export default function IntelPage() {
 
         {entityId && <EntityDetail id={entityId} onClose={() => set("entity", null)} />}
 
-        <Tabs defaultValue="overview">
+        <Tabs value={params.get("tab") ?? "pulse"} onValueChange={(v) => set("tab", v === "pulse" ? null : v)}>
           <TabsList>
+            <TabsTrigger value="pulse">Pulse</TabsTrigger>
             <TabsTrigger value="overview">Overview</TabsTrigger>
             <TabsTrigger value="watchlist">Watchlist {watch.data?.entities.length ? `(${watch.data.entities.length})` : ""}</TabsTrigger>
             <TabsTrigger value="history">Search history</TabsTrigger>
             <TabsTrigger value="traffic">Website traffic</TabsTrigger>
           </TabsList>
+
+          <TabsContent value="pulse">
+            <PulsePanel />
+          </TabsContent>
 
           <TabsContent value="overview" className="space-y-5">
             {dash.isLoading || !d ? (
@@ -703,7 +709,7 @@ export default function IntelPage() {
 
           <TabsContent value="watchlist">
             <Card>
-              <CardHeader title="Watchlist" description="Watched items get a new snapshot about every 6 hours from free sources. Paid sources are never scheduled." />
+              <CardHeader title="Watchlist" description="Watched items get a new snapshot every 20 minutes from free sources. Paid sources are never scheduled." />
               <CardBody>
                 {watch.data?.entities.length ? (
                   <Table>

@@ -3,7 +3,7 @@ import { prisma } from "@socialpilot/db";
 import { createProject, listCustomProviders, resolveImageAI, resolveTextAI, saveCustomProvider, textCost } from "../src";
 
 // Routing must not depend on keys in the developer's .env.
-const AI_ENV = ["NVIDIA_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "OLLAMA_API_KEY", "CLOUDFLARE_API_TOKEN", "CLOUDFLARE_ACCOUNT_ID", "BYTEPLUS_API_KEY", "REPLICATE_API_TOKEN", "STABILITY_API_KEY"];
+const AI_ENV = ["NVIDIA_API_KEY", "ANTHROPIC_API_KEY", "OPENAI_API_KEY", "GEMINI_API_KEY", "OLLAMA_API_KEY", "BYTEPLUS_API_KEY", "REPLICATE_API_TOKEN", "STABILITY_API_KEY"];
 const saved: Record<string, string | undefined> = {};
 beforeAll(() => {
   for (const k of AI_ENV) {

@@ -71,9 +71,11 @@ export async function schedulerTick() {
       await scheduleSyncs();
       await refreshTokens();
       await enqueue("discover.refresh", {}, { dedupeKey: `discover:${bucket(60 * 60_000)}`, maxAttempts: 1 });
-      // Free public-data snapshots for watched profiles/posts (never paid sources).
-      await enqueue("intel.refresh", {}, { dedupeKey: `intel:${bucket(60 * 60_000)}`, maxAttempts: 1 });
     }
+    // Social Pulse every 20 minutes (free sources; paid feeds only for users who opted in, within their cap),
+    // plus free snapshots of watched profiles/posts.
+    await enqueue("intel.pulse", {}, { dedupeKey: `pulse:${bucket(20 * 60_000)}`, maxAttempts: 1 });
+    await enqueue("intel.refresh", {}, { dedupeKey: `intel:${bucket(20 * 60_000)}`, maxAttempts: 1 });
     if (Date.now() - lastCleanup > 6 * 3600_000) {
       lastCleanup = Date.now();
       await cleanup();

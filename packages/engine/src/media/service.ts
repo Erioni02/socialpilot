@@ -7,6 +7,7 @@ import { getObject, newKey, putObject } from "../infra/storage";
 import { emit } from "../infra/events";
 import { checkBudget, recordUsage, resolveImageAI, resolveTranscriptionAI, resolveVideoAI, type AiCallContext } from "../ai/service";
 import * as ff from "./ffmpeg";
+import { craftImagePrompt, craftVideoPrompt } from "./creative";
 
 export const ALLOWED_UPLOAD_TYPES: Record<string, "image" | "video" | "audio" | "document"> = {
   "image/png": "image",
@@ -296,7 +297,7 @@ function brandPromptSuffix(project: Project): string {
 
 export async function generateImages(
   ctx: OpContext,
-  input: { prompt: string; size?: "1024x1024" | "1024x1536" | "1536x1024"; n?: number; folder?: string; campaignId?: string | null; provider?: string; model?: string; name?: string; applyBrandStyle?: boolean },
+  input: { prompt: string; size?: "1024x1024" | "1024x1536" | "1536x1024"; n?: number; folder?: string; campaignId?: string | null; provider?: string; model?: string; name?: string; applyBrandStyle?: boolean; enhance?: boolean },
 ) {
   const ai = await resolveImageAI(ctx.userId, ctx.project, input.provider);
   const model = input.model ?? ai.model;
@@ -304,7 +305,9 @@ export async function generateImages(
   const unit = (k: number) => (ai.unitPrice != null ? ai.unitPrice * k : estimateUnitCost(model, k));
   const cost = unit(n);
   await checkBudget(ctx, cost);
-  const prompt = input.prompt + (input.applyBrandStyle !== false ? brandPromptSuffix(ctx.project) : "");
+  // Creative-director pass (skills + brand) unless disabled; falls back to the raw prompt + brand hints.
+  const crafted = input.enhance !== false ? await craftImagePrompt(ctx, ctx.project, input.prompt, input.size ?? "1024x1024") : { prompt: input.prompt, enhanced: false };
+  const prompt = crafted.prompt + (!crafted.enhanced && input.applyBrandStyle !== false ? brandPromptSuffix(ctx.project) : "");
   const out: GeneratedMedia[] = await ai.provider.generate({ model, prompt, size: input.size ?? "1024x1024", n });
   const real = out.filter((o) => o.data.length > 0);
   if (!real.length) throw new Error("The image provider returned no image data — nothing was saved.");
@@ -316,7 +319,7 @@ export async function generateImages(
       { name: input.name ?? input.prompt.slice(0, 60) + (real.length > 1 ? ` (${i + 1})` : ""), kind: "image", folder: input.folder, campaignId: input.campaignId, source: "generated", createdBy: ctx.createdBy },
       real[i].data,
       normalizeImageMime(real[i].mimeType),
-      { operation: "generate", params: { size: input.size, userPrompt: input.prompt }, provider: ai.providerId, model, prompt, costUsd: unit(1), createdBy: ctx.createdBy },
+      { operation: "generate", params: { size: input.size, userPrompt: input.prompt, enhanced: crafted.enhanced }, provider: ai.providerId, model, prompt, costUsd: unit(1), createdBy: ctx.createdBy },
     );
     assets.push(r.asset);
   }
@@ -325,7 +328,7 @@ export async function generateImages(
 
 export async function generateVideo(
   ctx: OpContext,
-  input: { prompt: string; aspect: "9:16" | "16:9" | "1:1"; durationSec: number; imageAssetId?: string; folder?: string; campaignId?: string | null; model?: string; assetId?: string },
+  input: { prompt: string; aspect: "9:16" | "16:9" | "1:1"; durationSec: number; imageAssetId?: string; folder?: string; campaignId?: string | null; model?: string; assetId?: string; enhance?: boolean },
 ) {
   const ai = await resolveVideoAI(ctx.userId, ctx.project);
   const model = input.model ?? ai.model;
@@ -336,11 +339,12 @@ export async function generateVideo(
     const img = await loadAsset(input.imageAssetId);
     imageDataUri = `data:${img.version.mimeType};base64,${img.data.toString("base64")}`;
   }
-  const out = await ai.provider.generate({ model, prompt: input.prompt, aspect: input.aspect, durationSec: input.durationSec, imageDataUri });
+  const crafted = input.enhance !== false ? await craftVideoPrompt(ctx, ctx.project, input.prompt, input.aspect, input.durationSec, !!imageDataUri) : { prompt: input.prompt, enhanced: false };
+  const out = await ai.provider.generate({ model, prompt: crafted.prompt, aspect: input.aspect, durationSec: input.durationSec, imageDataUri });
   if (!out.data.length) throw new Error("The video provider returned no video data — nothing was saved.");
   await recordUsage(ctx, { provider: ai.providerId, model, kind: "video", units: 1, costUsd: cost });
   const mime = out.mimeType.startsWith("video/") ? out.mimeType.split(";")[0] : "video/mp4";
-  const meta = { operation: "generate", params: { aspect: input.aspect, durationSec: input.durationSec, imageAssetId: input.imageAssetId }, provider: ai.providerId, model, prompt: input.prompt, costUsd: cost, createdBy: ctx.createdBy };
+  const meta = { operation: "generate", params: { aspect: input.aspect, durationSec: input.durationSec, imageAssetId: input.imageAssetId, userPrompt: input.prompt, enhanced: crafted.enhanced }, provider: ai.providerId, model, prompt: crafted.prompt, costUsd: cost, createdBy: ctx.createdBy };
   if (input.assetId) {
     const asset = await prisma.asset.findUniqueOrThrow({ where: { id: input.assetId } });
     await addVersion(asset, out.data, mime, meta);

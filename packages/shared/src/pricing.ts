@@ -30,10 +30,9 @@ export const UNIT_PRICES: Record<string, number> = {
   "minimax/video-01": 0.5,
   "kwaivgi/kling-v2.1": 0.3,
   "whisper-1": 0.006,
-  "@cf/black-forest-labs/flux-1-schnell": 0.0015,
-  "@cf/bytedance/stable-diffusion-xl-lightning": 0,
-  "@cf/stabilityai/stable-diffusion-xl-base-1.0": 0,
-  "@cf/runwayml/stable-diffusion-v1-5-img2img": 0,
+  "seedream-5-0-260128": 0.035, // estimate per image
+  "seedream-5-0-pro-260628": 0.045,
+  "seedream-4-0-250828": 0.03,
   "dreamina-seedance-2-0-fast-260128": 0.4, // estimate per 5s 720p clip
   "dreamina-seedance-2-0-260128": 0.8,
 };

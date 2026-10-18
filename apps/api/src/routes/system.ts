@@ -95,7 +95,6 @@ export default async function systemRoutes(app: FastifyInstance) {
       if (!body.clientId || !body.clientSecret) throw badRequest("Client ID and client secret are required");
     } else if (!body.apiKey && !(AI_PROVIDER_CATALOG as Record<string, { keyOptional?: boolean }>)[provider]?.keyOptional) throw badRequest("API key is required");
     if (provider === "ollama") body.baseUrl = undefined; // Ollama Cloud only
-    if (provider === "cloudflare" && !body.accountId) throw badRequest("Cloudflare also needs your account ID");
     const user = userOf(req);
     await saveCredential(user.id, provider, { apiKey: body.apiKey, clientId: body.clientId, clientSecret: body.clientSecret, accountId: body.accountId, baseUrl: body.baseUrl }, body.label);
     await audit({ userId: user.id, actor: "user", action: "credential.saved", target: provider, ip: req.ip });

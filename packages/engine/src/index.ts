@@ -28,3 +28,5 @@ export * from "./automation/service";
 export * from "./scheduler";
 export * from "./jobs";
 export * from "./intel/service";
+export * from "./intel/pulse";
+export * from "./agents/skills";

@@ -180,7 +180,7 @@ export interface AiProviderCatalogEntry {
   envVar: string;
   /** True when the provider works without an API key (e.g. a local Ollama server). */
   keyOptional?: boolean;
-  /** Extra non-secret fields stored with the key (e.g. Cloudflare account ID, BytePlus region URL). */
+  /** Extra non-secret fields stored with the key (e.g. BytePlus region URL). */
   extraFields?: { key: "accountId" | "baseUrl"; label: string; envVar: string; optional?: boolean; placeholder?: string }[];
   docsUrl: string;
   keyUrl?: string;
@@ -230,32 +230,19 @@ export const AI_PROVIDER_CATALOG: Record<AiProviderId, AiProviderCatalogEntry> =
       { id: "qwen3-vl:235b", kind: "text", label: "Qwen3-VL 235B (vision)", roles: ["vision"] },
     ],
   },
-  cloudflare: {
-    id: "cloudflare",
-    name: "Cloudflare Workers AI",
-    capabilities: ["image", "image_edit"],
-    envVar: "CLOUDFLARE_API_TOKEN",
-    extraFields: [{ key: "accountId", label: "Account ID", envVar: "CLOUDFLARE_ACCOUNT_ID", placeholder: "32-character account ID" }],
-    docsUrl: "https://developers.cloudflare.com/workers-ai/models/flux-1-schnell/",
-    keyUrl: "https://dash.cloudflare.com/profile/api-tokens",
-    defaultModels: { image: "@cf/black-forest-labs/flux-1-schnell" },
-    models: [
-      { id: "@cf/black-forest-labs/flux-1-schnell", kind: "image", label: "FLUX.1 schnell" },
-      { id: "@cf/bytedance/stable-diffusion-xl-lightning", kind: "image", label: "SDXL Lightning" },
-      { id: "@cf/stabilityai/stable-diffusion-xl-base-1.0", kind: "image", label: "SDXL base 1.0" },
-      { id: "@cf/runwayml/stable-diffusion-v1-5-img2img", kind: "image", label: "SD 1.5 img2img (edits)" },
-    ],
-  },
   byteplus: {
     id: "byteplus",
-    name: "ByteDance Seedance (BytePlus ModelArk)",
-    capabilities: ["video"],
+    name: "ByteDance (BytePlus ModelArk) — Seedream images + Seedance video",
+    capabilities: ["image", "image_edit", "video"],
     envVar: "BYTEPLUS_API_KEY",
     extraFields: [{ key: "baseUrl", label: "API base URL (optional)", envVar: "BYTEPLUS_BASE_URL", optional: true, placeholder: "https://ark.ap-southeast.bytepluses.com/api/v3" }],
     docsUrl: "https://docs.byteplus.com/en/docs/ModelArk",
     keyUrl: "https://console.byteplus.com/ark",
-    defaultModels: { video: "dreamina-seedance-2-0-fast-260128" },
+    defaultModels: { image: "seedream-5-0-260128", video: "dreamina-seedance-2-0-fast-260128" },
     models: [
+      { id: "seedream-5-0-260128", kind: "image", label: "Seedream 5.0 Lite (default)" },
+      { id: "seedream-5-0-pro-260628", kind: "image", label: "Seedream 5.0 Pro (best text rendering)" },
+      { id: "seedream-4-0-250828", kind: "image", label: "Seedream 4.0" },
       { id: "dreamina-seedance-2-0-fast-260128", kind: "video", label: "Seedance 2.0 Fast" },
       { id: "dreamina-seedance-2-0-260128", kind: "video", label: "Seedance 2.0" },
     ],

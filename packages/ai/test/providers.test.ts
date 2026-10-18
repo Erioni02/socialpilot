@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cloudflareProvider, listOllamaModels, nvidiaProvider, ollamaProvider, ollamaRoot, seedanceProvider, stripThinking } from "../src";
+import { seedreamProvider, listOllamaModels, nvidiaProvider, ollamaProvider, ollamaRoot, seedanceProvider, stripThinking } from "../src";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -38,26 +38,26 @@ describe("NVIDIA API Catalog", () => {
   });
 });
 
-describe("Cloudflare Workers AI", () => {
-  it("decodes FLUX base64 output and posts to the account-scoped run URL", async () => {
+describe("ByteDance Seedream (BytePlus ModelArk)", () => {
+  it("generates without a watermark at a Seedream-sized resolution and decodes base64", async () => {
     const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 1, 2, 3]);
-    const calls = mockFetch(() => json({ success: true, result: { image: png.toString("base64") } }));
-    const out = await cloudflareProvider("cf-token", "acc123").generate({ model: "@cf/black-forest-labs/flux-1-schnell", prompt: "a cat" });
-    expect(calls[0].url).toBe("https://api.cloudflare.com/client/v4/accounts/acc123/ai/run/@cf/black-forest-labs/flux-1-schnell");
+    const calls = mockFetch(() => json({ id: "r1", data: [{ b64_json: png.toString("base64") }] }));
+    const out = await seedreamProvider("ark-key").generate({ model: "seedream-5-0-260128", prompt: "a cat", size: "1024x1536" });
+    expect(calls[0].url).toBe("https://ark.ap-southeast.bytepluses.com/api/v3/images/generations");
+    const body = JSON.parse(String(calls[0].init.body));
+    expect(body).toMatchObject({ model: "seedream-5-0-260128", size: "1664x2496", watermark: false, response_format: "b64_json" });
     expect(out[0].data.equals(png)).toBe(true);
     expect(out[0].mimeType).toBe("image/png");
   });
-  it("accepts binary image responses (Stable Diffusion models)", async () => {
-    mockFetch(() => new Response(new Uint8Array([0xff, 0xd8, 0xff, 1]), { headers: { "content-type": "image/jpeg" } }));
-    const out = await cloudflareProvider("t", "a").generate({ model: "@cf/bytedance/stable-diffusion-xl-lightning", prompt: "x", size: "1024x1536" });
-    expect(out[0].mimeType).toBe("image/jpeg");
+  it("sends the source image for edits", async () => {
+    const jpg = Buffer.from([0xff, 0xd8, 0xff, 1]);
+    const calls = mockFetch(() => json({ data: [{ b64_json: jpg.toString("base64") }] }));
+    await seedreamProvider("k").edit!({ model: "seedream-5-0-260128", prompt: "make it blue", image: { data: jpg, mimeType: "image/jpeg" } });
+    expect(JSON.parse(String(calls[0].init.body)).image).toMatch(/^data:image\/jpeg;base64,/);
   });
-  it("surfaces Cloudflare error messages", async () => {
-    mockFetch(() => json({ success: false, errors: [{ message: "Authentication error" }] }, 401));
-    await expect(cloudflareProvider("t", "a").generate({ model: "@cf/black-forest-labs/flux-1-schnell", prompt: "x" })).rejects.toThrow(/Authentication error/);
-  });
-  it("requires an account id", () => {
-    expect(() => cloudflareProvider("t", "")).toThrow(/account ID/);
+  it("surfaces API errors", async () => {
+    mockFetch(() => json({ error: { code: "AuthenticationError", message: "The API key is invalid" } }, 401));
+    await expect(seedreamProvider("bad").generate({ model: "seedream-5-0-260128", prompt: "x" })).rejects.toThrow();
   });
 });
 

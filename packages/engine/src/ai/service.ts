@@ -32,7 +32,7 @@ export class BudgetExceededError extends AppError {
 
 const TEXT_ORDER = ["nvidia", "anthropic", "openai", "gemini", "ollama"];
 const VISION_CAPABLE = ["nvidia", "anthropic", "openai", "gemini", "ollama"];
-const IMAGE_ORDER = ["cloudflare", "openai", "replicate", "stability"];
+const IMAGE_ORDER = ["byteplus", "openai", "replicate", "stability"];
 const VIDEO_ORDER = ["byteplus", "replicate"];
 
 /** text = main agent model (tool use); reasoning = planning & analysis; vision = images/video frames; fast = cheap classification. */
@@ -226,11 +226,11 @@ export async function resolveImageAI(userId: string, project?: Pick<Project, "ai
   const customImg = capability === "generate" ? await customIds(userId, "image") : [];
   let order = [...new Set([...(preferred ? [preferred] : []), ...IMAGE_ORDER, ...customImg])];
   if (capability !== "generate") order = order.filter((p) => !isCustomProvider(p));
-  if (capability === "edit") order = order.filter((p) => ["cloudflare", "openai", "replicate"].includes(p));
+  if (capability === "edit") order = order.filter((p) => ["byteplus", "openai", "replicate"].includes(p));
   if (capability === "remove_background") order = order.filter((p) => p === "replicate" || p === "stability");
   const found = await firstConfigured(userId, order);
   if (!found) {
-    const needs = capability === "edit" ? "Cloudflare, OpenAI or Replicate" : capability === "remove_background" ? "Replicate or Stability AI" : "Cloudflare Workers AI, OpenAI, Replicate or Stability AI";
+    const needs = capability === "edit" ? "ByteDance (BytePlus), OpenAI or Replicate" : capability === "remove_background" ? "Replicate or Stability AI" : "ByteDance (BytePlus Seedream), OpenAI, Replicate or Stability AI";
     throw new SetupRequiredError(`Image ${capability.replace("_", " ")} needs a ${needs} key. Add one in Settings → AI providers.`, { kind: "ai_provider", link: "/settings?tab=ai" });
   }
   if (found.custom) {

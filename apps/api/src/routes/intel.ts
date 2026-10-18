@@ -13,6 +13,11 @@ import {
   listIntelEntities,
   MAX_PAID_CHARGE_USD,
   paidSourceBalance,
+  getPulseSettings,
+  listPulse,
+  pulseCreditsToday,
+  runSocialPulse,
+  savePulseSettings,
   paidSourceStatus,
   postpeerXAccounts,
   postpeerXConnect,
@@ -66,6 +71,20 @@ export default async function intelRoutes(app: FastifyInstance) {
 
   /** OAuth URL to connect an X account to PostPeer; PostPeer redirects back to Social Intel afterwards. */
   app.post("/intel/postpeer/connect", A, async (req) => postpeerXConnect(userOf(req).id, `${new URL(config.APP_URL).origin}/intel?postpeer=connected`));
+
+  /** Social Pulse: rising items from the 20-minute crawl, ranked by momentum (+ relevance to a project). */
+  app.get("/intel/pulse", A, async (req) => {
+    const q = parse(z.object({ platform: z.enum(["all", "bluesky", "mastodon", "google_trends", "tiktok", "instagram"]).default("all"), hours: z.coerce.number().min(1).max(168).default(24), projectId: z.string().optional() }), req.query);
+    const user = userOf(req);
+    return listPulse(user.id, { ...q, projectId: await ownedProjectId(user.id, q.projectId) });
+  });
+  app.get("/intel/pulse/settings", A, async (req) => {
+    const user = userOf(req);
+    return { settings: await getPulseSettings(user.id), today: await pulseCreditsToday(user.id), socialcrawlConfigured: !!(await getApiKey(user.id, "socialcrawl")) };
+  });
+  app.put("/intel/pulse/settings", A, async (req) => ({ settings: await savePulseSettings(userOf(req).id, req.body) }));
+  /** Manual refresh: same job the scheduler runs (free sources; paid feeds still obey opt-in, interval and cap). */
+  app.post("/intel/pulse/run", { preHandler: app.requireAuth, config: { rateLimit: { max: 3, timeWindow: "5 minutes" } } }, async () => runSocialPulse());
 
   app.get("/intel/dashboard", A, async (req) => {
     const q = parse(z.object({ platform: z.enum(["all", "tiktok", "instagram", "x"]).default("all"), watchedOnly: z.coerce.boolean().default(false) }), req.query);

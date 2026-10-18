@@ -79,8 +79,7 @@ Token based. Create an access token at vercel.com/account/tokens and enter the p
 | Provider | Used for | Key |
 |---|---|---|
 | **NVIDIA API Catalog** (recommended main AI) | Agents with tool calling (default `moonshotai/kimi-k2.6`), thinking/planning (`nvidia/nemotron-3-ultra-550b-a55b`), vision for images and sampled video frames (`nvidia/nemotron-3.5-super-vl-120b-a12b`, or `nvidia/cosmos-reason2-8b` for video), fast triage (`z-ai/glm-5.3-flash`). Each role is configurable per project. | `NVIDIA_API_KEY` or Settings |
-| **Cloudflare Workers AI** | Image generation (FLUX.1 schnell by default; SDXL models available) and img2img edits | `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` |
-| **ByteDance Seedance** (BytePlus ModelArk) | Video generation (text-to-video, first-frame image-to-video) | `BYTEPLUS_API_KEY` (+ optional `BYTEPLUS_BASE_URL`) |
+| **ByteDance (BytePlus ModelArk)** (main image and video AI) | Image generation and edits with **Seedream** (default `seedream-5-0-260128`, Pro for best text rendering) and video with **Seedance** (text-to-video, first-frame image-to-video). One API key covers both. | `BYTEPLUS_API_KEY` (+ optional `BYTEPLUS_BASE_URL`) |
 | Anthropic | Agents (tool use), text, vision. Default model `claude-opus-5-5`; server-side refusal fallback enabled | `ANTHROPIC_API_KEY` or Settings |
 | OpenAI | Agents (tool use), text, `gpt-image-1` generation and edits, Whisper subtitles | `OPENAI_API_KEY` |
 | Google Gemini | Text and vision (not used for agents) | `GEMINI_API_KEY` |
@@ -115,9 +114,23 @@ It then appears in every model-role picker. Remote URLs must use HTTPS. Localhos
 
 **Model roles:** each project picks a provider and model for *Main AI*, *Thinking & planning*, *Vision*, *Fast tasks*, *Image generation* and *Video generation* (Project settings → AI). Main models without native vision get attachments described by the vision model, and agents have an `analyze_media` tool that sends images, or FFmpeg-sampled video frames, to the vision model.
 
+**Marketing and creative skills:** every agent works from built-in marketing principles plus expert playbooks: positioning, copywriting frameworks, hooks, platform playbooks, campaign strategy, trend-jacking, conversion optimization, growth experiments, analytics, community replies, brand consistency, image creative direction, converting ad creatives and video creative direction. The playbooks that fit an agent's job are preloaded, and any agent can pull another with `load_skill`. The library is in `packages/engine/src/agents/skills.ts`. **Image and video generation runs a creative-director pass first:** your brief and the project's brand (colors, tone, audience) are turned into a production-grade Seedream or Seedance prompt with composition, lighting, style and quality details. The original brief and the final prompt are both saved on the asset version. If no text AI is configured, the brief is used as is.
+
 Model IDs are free text in project AI settings, so newer models can be used without code changes. Cost estimates for budget enforcement are in `packages/shared/src/pricing.ts`.
 
 ---
+
+## Social Pulse (every 20 minutes)
+
+**Social Intel → Pulse** shows what is rising on social media right now, ranked by momentum (how fast a post, topic or search grows between crawls) and, if you pick a project, by how well it matches the project's keywords. The worker crawls every 20 minutes. Free sources are always on:
+
+| Source | What | How |
+|---|---|---|
+| Bluesky | Trending topics | Public AppView API |
+| Mastodon | Trending posts, hashtags and links, plus recent posts for up to 8 hashtags taken from your project keywords | mastodon.social public API |
+| Google Trends | "Trending now" searches with linked news, per country | Public RSS |
+
+Reddit, TikTok, Instagram and X have no free logged-out trend source (or they block bots), and SocialPilot doesn't work around that. **TikTok trending and Instagram trending Reels** are available through SocialCrawl as a paid opt-in under Pulse settings: off by default, 5 credits per platform per run, your own interval (≥ 20 min) and a **hard daily credit cap**. Every paid run is written to the audit log, and crawling stops at the cap. When new trends match a project, you get a notification, at most one every 2 hours per project. Agents read the pulse with the `get_social_pulse` tool.
 
 ## Social Intel (public profiles and posts)
 
@@ -132,7 +145,7 @@ Model IDs are free text in project AI settings, so newer models can be used with
 | Instagram post / Reel / profile | — (login wall; Basic Display API was discontinued) | — | SocialCrawl or Apify; or the official API for your own professional account |
 
 - **No evasion:** requests send an honest user agent, use no proxies, never solve CAPTCHAs and never use cookies or logins. These free sources can stop working whenever a platform changes its pages; when that happens the app reports it rather than guessing.
-- **Watchlist:** watched items get a snapshot about every 6 hours from **free sources only**. Charts and change tables use snapshots SocialPilot itself recorded; those changes are not unique viewers.
+- **Watchlist:** watched items get a snapshot every 20 minutes from **free sources only**. Charts and change tables use snapshots SocialPilot itself recorded; those changes are not unique viewers.
 - **Exports:** CSV export includes every snapshot. Missing metrics stay blank.
 
 ### Paid, opt-in sources
